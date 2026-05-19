@@ -80,8 +80,8 @@ export default function LoginPage() {
     setError('')
     setLoading(true)
     try {
-      await login(email, password)
-      navigate('/dashboard')
+      const data = await login(email, password)
+      navigate(data.user.role === 'admin' ? '/admin' : '/dashboard')
     } catch (err) {
       const msg = err.response?.data?.detail || 'Terjadi kesalahan, coba lagi.'
       setError(msg)
