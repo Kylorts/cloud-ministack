@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { login } from '../services/auth'
 import './LoginPage.css'
 
 function CloudIcon() {
@@ -71,15 +72,22 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [rememberDevice, setRememberDevice] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
   const navigate = useNavigate()
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    setError('')
     setLoading(true)
-    setTimeout(() => {
-      setLoading(false)
+    try {
+      await login(email, password)
       navigate('/dashboard')
-    }, 1000)
+    } catch (err) {
+      const msg = err.response?.data?.detail || 'Terjadi kesalahan, coba lagi.'
+      setError(msg)
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -169,6 +177,13 @@ export default function LoginPage() {
               </span>
               <span className="remember-label">Ingat perangkat ini</span>
             </label>
+
+            {/* Error Message */}
+            {error && (
+              <div className="error-banner" role="alert">
+                {error}
+              </div>
+            )}
 
             {/* Submit Button */}
             <button

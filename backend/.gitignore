@@ -1,0 +1,37 @@
+# ── Virtual environment ────────────────────────────────────────
+venv/
+.venv/
+env/
+
+# ── Secrets ────────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+
+# ── Python cache ───────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# ── Distribution / packaging ───────────────────────────────────
+build/
+dist/
+*.egg-info/
+*.egg
+
+# ── Testing ────────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ── Alembic ────────────────────────────────────────────────────
+# Keep versions tracked, ignore nothing here
+
+# ── Logs ───────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── MyPy ───────────────────────────────────────────────────────
+.mypy_cache/

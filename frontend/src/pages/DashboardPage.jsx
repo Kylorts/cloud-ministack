@@ -1,4 +1,6 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { logout, getStoredUser } from '../services/auth'
 import './DashboardPage.css'
 
 /* ── Icons ────────────────────────────────────────────────── */
@@ -78,6 +80,13 @@ function EyeOffIcon() {
     </svg>
   )
 }
+function LogoutIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
 function PlusIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
@@ -152,6 +161,26 @@ function CircularProgress({ value, size = 140 }) {
 /* ── Page Component ───────────────────────────────────────── */
 export default function DashboardPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [dropdownOpen, setDropdownOpen] = useState(false)
+  const dropdownRef = useRef(null)
+  const navigate = useNavigate()
+  const user = getStoredUser()
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  function handleLogout() {
+    logout()
+    navigate('/login')
+  }
 
   return (
     <div className="dashboard">
@@ -173,7 +202,29 @@ export default function DashboardPage() {
             <BellIcon />
             <span className="notif-dot" />
           </button>
-          <button className="icon-btn avatar-btn" aria-label="Profil"><UserIcon /></button>
+          <div className="avatar-wrapper" ref={dropdownRef}>
+            <button
+              className="icon-btn avatar-btn"
+              aria-label="Profil"
+              onClick={() => setDropdownOpen((v) => !v)}
+            >
+              <UserIcon />
+            </button>
+
+            {dropdownOpen && (
+              <div className="avatar-dropdown">
+                <div className="dropdown-user-info">
+                  <span className="dropdown-name">{user?.name ?? 'Pengguna'}</span>
+                  <span className="dropdown-email">{user?.email ?? ''}</span>
+                  <span className="dropdown-role-badge">{user?.role ?? 'user'}</span>
+                </div>
+                <div className="dropdown-divider" />
+                <button className="dropdown-logout-btn" onClick={handleLogout}>
+                  <LogoutIcon /> Keluar
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </nav>
 
