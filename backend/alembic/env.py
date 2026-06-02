@@ -7,7 +7,11 @@ from app.config import settings
 from app.database import Base
 
 # import all models so Alembic can detect them
-import app.models.user  # noqa: F401
+import app.models.user            # noqa: F401
+import app.models.plan            # noqa: F401
+import app.models.subscription    # noqa: F401
+import app.models.storage_bucket  # noqa: F401
+import app.models.storage_object  # noqa: F401
 
 config = context.config
 

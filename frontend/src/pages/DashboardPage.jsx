@@ -1,9 +1,11 @@
 import { useState, useRef, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { logout, getStoredUser } from '../services/auth'
+import { getMySubscription } from '../services/subscriptions'
+import { getBuckets } from '../services/storage'
 import './DashboardPage.css'
 
-/* ── Icons ────────────────────────────────────────────────── */
+/* ── Icons ─────────────────────────────────────────────────── */
 function MenuIcon() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
@@ -15,15 +17,6 @@ function SearchIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
       <path d="M21 21L16.514 16.506M19 10.5C19 15.194 15.194 19 10.5 19C5.806 19 2 15.194 2 10.5C2 5.806 5.806 2 10.5 2C15.194 2 19 5.806 19 10.5Z" stroke="#9CA3AF" strokeWidth="2" strokeLinecap="round" />
-    </svg>
-  )
-}
-function HelpIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-      <circle cx="12" cy="12" r="10" stroke="#062F28" strokeWidth="1.5" />
-      <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" stroke="#062F28" strokeWidth="1.5" strokeLinecap="round" />
-      <circle cx="12" cy="17" r="0.5" fill="#062F28" stroke="#062F28" />
     </svg>
   )
 }
@@ -49,12 +42,11 @@ function CloudOutlineIcon() {
     </svg>
   )
 }
-function CpuIcon() {
+function PackageIcon() {
   return (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-      <rect x="4" y="4" width="16" height="16" rx="2" stroke="#062F28" strokeWidth="1.5" />
-      <rect x="9" y="9" width="6" height="6" stroke="#062F28" strokeWidth="1.5" />
-      <path d="M9 1v3M15 1v3M9 20v3M15 20v3M1 9h3M1 15h3M20 9h3M20 15h3" stroke="#062F28" strokeWidth="1.5" strokeLinecap="round" />
+      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" stroke="#062F28" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M3.27 6.96L12 12.01l8.73-5.05M12 22.08V12" stroke="#062F28" strokeWidth="1.5" strokeLinecap="round" />
     </svg>
   )
 }
@@ -73,13 +65,6 @@ function ExternalLinkIcon() {
     </svg>
   )
 }
-function EyeOffIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19M1 1l22 22" stroke="#9CA3AF" strokeWidth="1.5" strokeLinecap="round" />
-    </svg>
-  )
-}
 function LogoutIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
@@ -87,109 +72,73 @@ function LogoutIcon() {
     </svg>
   )
 }
-function PlusIcon() {
+function BucketIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-      <path d="M12 5v14M5 12h14" stroke="white" strokeWidth="2" strokeLinecap="round" />
-    </svg>
-  )
-}
-function KeyIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-      <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" stroke="#062F28" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M21 8H3l1.5 11.5A2 2 0 0 0 6.5 21h11a2 2 0 0 0 2-1.5L21 8z" stroke="#062F28" strokeWidth="1.5" strokeLinecap="round" />
+      <path d="M21 8a9 9 0 1 0-18 0" stroke="#062F28" strokeWidth="1.5" />
     </svg>
   )
 }
 
-/* ── Static Data ──────────────────────────────────────────── */
-const virtualResources = [
-  {
-    id: 'i-04d9c82e7',
-    name: 'prod-web-server-01',
-    type: 'EC2',
-    utilization: '14% CPU / 32% RAM',
-    status: 'active',
-  },
-  {
-    id: 'assets-01',
-    name: 'user-assets-storage',
-    type: 'MinIO',
-    utilization: 'Uptime 99.99%',
-    status: 'active',
-  },
-]
+function formatBytes(bytes) {
+  if (!bytes) return '0 B'
+  const gb = bytes / (1024 ** 3)
+  if (gb >= 1) return `${parseFloat(gb.toFixed(1))} GB`
+  const mb = bytes / (1024 ** 2)
+  return `${parseFloat(mb.toFixed(0))} MB`
+}
 
-const apiCredentials = [
-  {
-    id: 1,
-    name: 'Primary-App-Key',
-    created: '24 Sep 2024',
-    accessKey: 'AKIA....R4PT',
-  },
-  {
-    id: 2,
-    name: 'Staging-Deploy',
-    created: '15 Agu 2024',
-    accessKey: 'AKIA....M9LL',
-  },
-]
-
-/* ── Circular Progress SVG ────────────────────────────────── */
 function CircularProgress({ value, size = 140 }) {
   const radius = 54
   const circumference = 2 * Math.PI * radius
   const offset = circumference - (value / 100) * circumference
-
   return (
     <svg width={size} height={size} viewBox="0 0 120 120" className="circular-progress">
       <circle cx="60" cy="60" r={radius} fill="none" stroke="#E8F5E0" strokeWidth="8" />
-      <circle
-        cx="60" cy="60" r={radius}
-        fill="none"
-        stroke="#9FE870"
-        strokeWidth="8"
-        strokeDasharray={circumference}
-        strokeDashoffset={offset}
-        strokeLinecap="round"
-        transform="rotate(-90 60 60)"
-      />
+      <circle cx="60" cy="60" r={radius} fill="none" stroke="#9FE870" strokeWidth="8"
+        strokeDasharray={circumference} strokeDashoffset={offset}
+        strokeLinecap="round" transform="rotate(-90 60 60)" />
     </svg>
   )
 }
 
-/* ── Page Component ───────────────────────────────────────── */
+/* ── Page Component ─────────────────────────────────────────── */
 export default function DashboardPage() {
-  const [sidebarOpen, setSidebarOpen] = useState(false)
   const [dropdownOpen, setDropdownOpen] = useState(false)
+  const [subscription, setSubscription] = useState(null)
+  const [buckets, setBuckets] = useState([])
   const dropdownRef = useRef(null)
   const navigate = useNavigate()
   const user = getStoredUser()
 
-  // Close dropdown when clicking outside
+  useEffect(() => {
+    getMySubscription().then((r) => setSubscription(r.data)).catch(() => {})
+    getBuckets().then((r) => setBuckets(r.data)).catch(() => {})
+  }, [])
+
   useEffect(() => {
     function handleClickOutside(e) {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
-        setDropdownOpen(false)
-      }
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) setDropdownOpen(false)
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  function handleLogout() {
-    logout()
-    navigate('/login')
-  }
+  function handleLogout() { logout(); navigate('/login') }
+
+  const storageLimit = subscription?.plan?.storage_limit_bytes ?? 0
+  const storagePercent = 0 // akan diisi saat usage tracking ada
+  const activeBuckets = buckets.length
+  const bucketLimit = subscription?.plan?.bucket_limit ?? 0
+  const bucketPercent = bucketLimit ? Math.round((activeBuckets / bucketLimit) * 100) : 0
 
   return (
     <div className="dashboard">
       {/* ── Navbar ── */}
       <nav className="navbar">
         <div className="navbar-left">
-          <button className="icon-btn" onClick={() => setSidebarOpen(!sidebarOpen)} aria-label="Menu">
-            <MenuIcon />
-          </button>
+          <button className="icon-btn" aria-label="Menu"><MenuIcon /></button>
           <span className="navbar-brand">INI AWAN</span>
         </div>
         <div className="navbar-right">
@@ -197,20 +146,13 @@ export default function DashboardPage() {
             <SearchIcon />
             <input type="text" placeholder="Cari sumber daya..." className="search-input" />
           </div>
-          <button className="icon-btn" aria-label="Bantuan"><HelpIcon /></button>
           <button className="icon-btn notif-btn" aria-label="Notifikasi">
-            <BellIcon />
-            <span className="notif-dot" />
+            <BellIcon /><span className="notif-dot" />
           </button>
           <div className="avatar-wrapper" ref={dropdownRef}>
-            <button
-              className="icon-btn avatar-btn"
-              aria-label="Profil"
-              onClick={() => setDropdownOpen((v) => !v)}
-            >
+            <button className="icon-btn avatar-btn" onClick={() => setDropdownOpen((v) => !v)}>
               <UserIcon />
             </button>
-
             {dropdownOpen && (
               <div className="avatar-dropdown">
                 <div className="dropdown-user-info">
@@ -230,30 +172,30 @@ export default function DashboardPage() {
 
       {/* ── Main Content ── */}
       <main className="main-content">
-
-        {/* Page Header */}
         <div className="page-header">
-          <p className="greeting">Halo, Dika</p>
+          <p className="greeting">Halo, {user?.name ?? 'Pengguna'}</p>
           <h1 className="page-title">Ringkasan Infrastruktur</h1>
-          <p className="page-subtitle">Pantau dan kelola instans cloud Anda dalam satu portal terpadu.</p>
+          <p className="page-subtitle">Pantau dan kelola layanan cloud Anda dalam satu portal terpadu.</p>
         </div>
 
         {/* Stats Grid */}
         <div className="stats-grid">
-          {/* Storage Card */}
-          <div className="stat-card">
+          {/* Storage Card → klik ke /storage */}
+          <div className="stat-card stat-card--clickable" onClick={() => navigate('/storage')}>
             <div className="stat-card-header">
               <div>
                 <p className="stat-label">Kuota Penyimpanan</p>
-                <p className="stat-sublabel">Total kapasitas AWS S3 &amp; MinIO</p>
+                <p className="stat-sublabel">
+                  {subscription ? subscription.plan.name : 'Belum berlangganan'}
+                </p>
               </div>
               <span className="stat-icon"><CloudOutlineIcon /></span>
             </div>
             <div className="stat-center">
               <div className="stat-progress-wrap">
-                <CircularProgress value={45} />
+                <CircularProgress value={storagePercent} />
                 <div className="stat-value-overlay">
-                  <span className="stat-percent">45%</span>
+                  <span className="stat-percent">{storagePercent}%</span>
                   <span className="stat-percent-label">Terpakai</span>
                 </div>
               </div>
@@ -261,62 +203,64 @@ export default function DashboardPage() {
             <div className="stat-footer">
               <div className="stat-footer-item">
                 <span className="stat-footer-label">Digunakan</span>
-                <span className="stat-footer-value">45 GB</span>
+                <span className="stat-footer-value">0 B</span>
               </div>
               <div className="stat-footer-divider" />
               <div className="stat-footer-item">
-                <span className="stat-footer-label">Tersedia</span>
-                <span className="stat-footer-value">100 GB</span>
+                <span className="stat-footer-label">Kapasitas</span>
+                <span className="stat-footer-value">{formatBytes(storageLimit)}</span>
               </div>
             </div>
           </div>
 
-          {/* Compute Card */}
-          <div className="stat-card">
+          {/* Paket & Langganan Card → klik ke /langganan atau /paket */}
+          <div
+            className="stat-card stat-card--clickable"
+            onClick={() => navigate(subscription ? '/langganan' : '/paket')}
+          >
             <div className="stat-card-header">
               <div>
-                <p className="stat-label">Instans Komputasi</p>
-                <p className="stat-sublabel">Penggunaan vCPU Inti</p>
+                <p className="stat-label">Paket Langganan</p>
+                <p className="stat-sublabel">
+                  {subscription ? `Aktif hingga ${new Date(subscription.current_period_end).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}` : 'Pilih paket untuk mulai'}
+                </p>
               </div>
-              <span className="stat-icon"><CpuIcon /></span>
+              <span className="stat-icon"><PackageIcon /></span>
             </div>
             <div className="stat-center">
               <div className="stat-progress-wrap">
-                <CircularProgress value={28} />
+                <CircularProgress value={bucketPercent} />
                 <div className="stat-value-overlay">
-                  <span className="stat-percent">28%</span>
-                  <span className="stat-percent-label">Aktif</span>
+                  <span className="stat-percent">{activeBuckets}</span>
+                  <span className="stat-percent-label">Bucket</span>
                 </div>
               </div>
             </div>
             <div className="stat-footer">
               <div className="stat-footer-item">
-                <span className="stat-footer-label">vCPU Aktif</span>
-                <span className="stat-footer-value">14</span>
+                <span className="stat-footer-label">Bucket Aktif</span>
+                <span className="stat-footer-value">{activeBuckets}</span>
               </div>
               <div className="stat-footer-divider" />
               <div className="stat-footer-item">
-                <span className="stat-footer-label">Batas Kuota</span>
-                <span className="stat-footer-value">50</span>
+                <span className="stat-footer-label">Batas Paket</span>
+                <span className="stat-footer-value">{bucketLimit || '-'}</span>
               </div>
             </div>
           </div>
 
-          {/* Right Column: Network + Security */}
+          {/* Right Column */}
           <div className="stats-right-col">
-            {/* Network Card */}
             <div className="stat-card stat-card--dark">
               <div className="network-deco">
                 <span className="deco-circle deco-circle--1" />
                 <span className="deco-circle deco-circle--2" />
               </div>
               <p className="network-label">Transfer Data Jaringan</p>
-              <p className="network-value">1.4 TB / 5.0 TB</p>
+              <p className="network-value">0 B / {formatBytes(subscription?.plan?.bandwidth_limit_bytes ?? 0)}</p>
               <p className="network-sub">Kuota bandwidth keluar-masuk bulan ini</p>
-              <a href="#" className="network-link">Lihat Analisis Trafik →</a>
+              <Link to="/kuota" className="network-link">Lihat Analisis Trafik →</Link>
             </div>
-
-            {/* Security Card */}
             <div className="stat-card stat-card--accent">
               <div className="security-content">
                 <div>
@@ -331,91 +275,104 @@ export default function DashboardPage() {
 
         {/* Bottom Grid */}
         <div className="bottom-grid">
-          {/* Virtual Resources */}
+          {/* Bucket List */}
           <div className="table-card">
             <div className="table-card-header">
-              <h2 className="table-card-title">Sumber Daya Virtual</h2>
-              <a href="#" className="table-link">
+              <h2 className="table-card-title">Object Storage</h2>
+              <Link to="/storage" className="table-link">
                 Lihat Semua <ExternalLinkIcon />
-              </a>
+              </Link>
             </div>
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Nama Sumber Daya</th>
-                  <th>Tipe</th>
-                  <th>Utilitas Sistem</th>
+                  <th>Nama Bucket</th>
+                  <th>Visibilitas</th>
+                  <th>Status</th>
                   <th>Aksi</th>
                 </tr>
               </thead>
               <tbody>
-                {virtualResources.map((r) => (
-                  <tr key={r.id}>
-                    <td>
-                      <div className="resource-name-cell">
-                        <span className="resource-dot" />
-                        <div>
-                          <span className="resource-name">{r.name}</span>
-                          <span className="resource-id">ID: {r.id}</span>
-                        </div>
-                      </div>
-                    </td>
-                    <td>
-                      <span className={`badge badge--${r.type.toLowerCase()}`}>{r.type}</span>
-                    </td>
-                    <td className="util-cell">{r.utilization}</td>
-                    <td>
-                      <button className="action-btn">Kelola</button>
+                {buckets.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} style={{ textAlign: 'center', padding: '24px', color: '#9ca3af', fontSize: '13px' }}>
+                      Belum ada bucket.{' '}
+                      <Link to="/storage" style={{ color: '#062F28', fontWeight: 600 }}>Buat bucket pertama →</Link>
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  buckets.slice(0, 3).map((b) => (
+                    <tr key={b.id}>
+                      <td>
+                        <div className="resource-name-cell">
+                          <span className="resource-dot" />
+                          <div>
+                            <span className="resource-name">{b.display_name}</span>
+                            <span className="resource-id">{b.internal_name}</span>
+                          </div>
+                        </div>
+                      </td>
+                      <td>
+                        <span className={`badge badge--${b.visibility === 'public' ? 'ec2' : 'minio'}`}>
+                          {b.visibility === 'public' ? 'Publik' : 'Pribadi'}
+                        </span>
+                      </td>
+                      <td className="util-cell">{b.status === 'active' ? '● Aktif' : b.status}</td>
+                      <td>
+                        <button className="action-btn" onClick={() => navigate(`/storage/buckets/${b.id}`)}>
+                          Buka
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
 
-          {/* API Credentials */}
+          {/* Quick Links */}
           <div className="table-card">
             <div className="table-card-header">
-              <h2 className="table-card-title">Kredensial API</h2>
-              <button className="new-key-btn">
-                <PlusIcon /> Buat Kunci Baru
-              </button>
+              <h2 className="table-card-title">Navigasi Cepat</h2>
             </div>
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Nama Kunci</th>
-                  <th>Dibuat</th>
-                  <th>Access Key</th>
-                  <th>Secret Key</th>
-                </tr>
-              </thead>
-              <tbody>
-                {apiCredentials.map((c) => (
-                  <tr key={c.id}>
-                    <td>
-                      <div className="key-name-cell">
-                        <span className="key-icon"><KeyIcon /></span>
-                        <span className="key-name">{c.name}</span>
-                      </div>
-                    </td>
-                    <td className="date-cell">{c.created}</td>
-                    <td className="mono-cell">{c.accessKey}</td>
-                    <td>
-                      <div className="secret-cell">
-                        <span className="secret-dots">••••••••</span>
-                        <button className="eye-btn" aria-label="Tampilkan"><EyeOffIcon /></button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="quick-links">
+              <Link to="/storage" className="quick-link-item">
+                <span className="quick-link-icon"><BucketIcon /></span>
+                <div className="quick-link-text">
+                  <span className="quick-link-title">Object Storage</span>
+                  <span className="quick-link-desc">Kelola bucket dan file Anda</span>
+                </div>
+                <ExternalLinkIcon />
+              </Link>
+              <Link to="/paket" className="quick-link-item">
+                <span className="quick-link-icon"><PackageIcon /></span>
+                <div className="quick-link-text">
+                  <span className="quick-link-title">Pilih Paket</span>
+                  <span className="quick-link-desc">Lihat dan ubah paket layanan</span>
+                </div>
+                <ExternalLinkIcon />
+              </Link>
+              <Link to="/langganan" className="quick-link-item">
+                <span className="quick-link-icon"><CloudOutlineIcon /></span>
+                <div className="quick-link-text">
+                  <span className="quick-link-title">Detail Langganan</span>
+                  <span className="quick-link-desc">Status dan periode aktif</span>
+                </div>
+                <ExternalLinkIcon />
+              </Link>
+              <Link to="/kuota" className="quick-link-item">
+                <span className="quick-link-icon"><ShieldIcon /></span>
+                <div className="quick-link-text">
+                  <span className="quick-link-title">Penggunaan & Kuota</span>
+                  <span className="quick-link-desc">Monitor pemakaian resource</span>
+                </div>
+                <ExternalLinkIcon />
+              </Link>
+            </div>
           </div>
         </div>
       </main>
 
-      {/* ── Footer ── */}
       <footer className="footer">
         <span className="footer-brand">INI AWAN</span>
         <span className="footer-copy">© 2026 INI AWAN.</span>

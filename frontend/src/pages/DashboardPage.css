@@ -754,6 +754,65 @@
   opacity: 1;
 }
 
+/* ── Clickable stat card ──────────────────────────────────── */
+.stat-card--clickable {
+  cursor: pointer;
+  transition: box-shadow 0.15s, transform 0.15s;
+}
+.stat-card--clickable:hover {
+  box-shadow: 0 4px 16px rgba(6, 47, 40, 0.10);
+  transform: translateY(-1px);
+}
+
+/* ── Quick links ──────────────────────────────────────────── */
+.quick-links {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.quick-link-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: var(--radius-md);
+  transition: background 0.15s;
+  color: var(--color-dark);
+}
+.quick-link-item:hover { background: #F4F9F4; }
+
+.quick-link-icon {
+  width: 36px;
+  height: 36px;
+  background: #EEF5EE;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.quick-link-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.quick-link-title {
+  font-family: var(--font-ui);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-dark);
+}
+
+.quick-link-desc {
+  font-family: var(--font-body);
+  font-size: var(--font-size-xs);
+  color: var(--color-gray);
+}
+
 /* ── Footer ───────────────────────────────────────────────── */
 .footer {
   background-color: var(--color-white);

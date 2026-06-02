@@ -14,6 +14,11 @@ class Settings(BaseSettings):
 
     CORS_ORIGINS: str = "http://localhost:5174"
 
+    MINISTACK_ENDPOINT: str = "http://localhost:4566"
+    MINISTACK_ACCESS_KEY: str = "test"
+    MINISTACK_SECRET_KEY: str = "test"
+    MINISTACK_REGION: str = "us-east-1"
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
     @property

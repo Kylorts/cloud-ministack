@@ -3,6 +3,11 @@ import { isAuthenticated, getStoredUser } from './services/auth'
 import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
 import AdminDashboardPage from './pages/AdminDashboardPage'
+import PaketPage from './pages/PaketPage'
+import LanggananPage from './pages/LanggananPage'
+import StoragePage from './pages/StoragePage'
+import BucketDetailPage from './pages/BucketDetailPage'
+import KuotaPage from './pages/KuotaPage'
 
 function PrivateRoute({ children }) {
   return isAuthenticated() ? children : <Navigate to="/login" replace />
@@ -29,7 +34,26 @@ export default function App() {
         <PrivateRoute><AdminDashboardPage /></PrivateRoute>
       } />
 
-      {/* Root redirects based on role */}
+      <Route path="/paket" element={
+        <PrivateRoute><PaketPage /></PrivateRoute>
+      } />
+
+      <Route path="/langganan" element={
+        <PrivateRoute><LanggananPage /></PrivateRoute>
+      } />
+
+      <Route path="/storage" element={
+        <PrivateRoute><StoragePage /></PrivateRoute>
+      } />
+
+      <Route path="/storage/buckets/:id" element={
+        <PrivateRoute><BucketDetailPage /></PrivateRoute>
+      } />
+
+      <Route path="/kuota" element={
+        <PrivateRoute><KuotaPage /></PrivateRoute>
+      } />
+
       <Route path="/" element={<RoleRoute />} />
     </Routes>
   )

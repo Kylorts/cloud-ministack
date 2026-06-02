@@ -16,6 +16,21 @@ services:
       timeout: 5s
       retries: 10
 
+  ministack:
+    image: ministackorg/ministack
+    ports:
+      - "4566:4566"
+    environment:
+      PERSIST_STATE: "1"
+    volumes:
+      - ministack_data:/var/lib/ministack
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:4566/_ministack/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
   backend:
     build: ./backend
     ports:
@@ -30,8 +45,14 @@ services:
       JWT_ALGORITHM: HS256
       JWT_EXPIRE_MINUTES: 60
       CORS_ORIGINS: http://localhost:81
+      MINISTACK_ENDPOINT: http://ministack:4566
+      MINISTACK_ACCESS_KEY: test
+      MINISTACK_SECRET_KEY: test
+      MINISTACK_REGION: us-east-1
     depends_on:
       db:
+        condition: service_healthy
+      ministack:
         condition: service_healthy
 
   frontend:
@@ -46,3 +67,4 @@ services:
 
 volumes:
   db_data:
+  ministack_data:
