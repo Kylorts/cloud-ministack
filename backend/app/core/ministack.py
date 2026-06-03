@@ -45,6 +45,18 @@ def bucket_exists(internal_name: str) -> bool:
 
 # ── Object operations ──────────────────────────────────────────────
 
+def _ensure_bucket_exists(client, bucket_name: str) -> None:
+    """Pastikan bucket ada di MiniStack. Auto-recreate jika hilang (misal setelah restart)."""
+    try:
+        client.head_bucket(Bucket=bucket_name)
+    except ClientError as e:
+        code = e.response["Error"]["Code"]
+        if code in ("404", "NoSuchBucket"):
+            client.create_bucket(Bucket=bucket_name)
+        else:
+            raise
+
+
 def upload_object(
     bucket_name: str,
     object_key: str,
@@ -52,6 +64,7 @@ def upload_object(
     content_type: str = "application/octet-stream",
 ) -> str:
     client = get_s3_client()
+    _ensure_bucket_exists(client, bucket_name)
     client.put_object(
         Bucket=bucket_name,
         Key=object_key,
@@ -64,6 +77,7 @@ def upload_object(
 
 def download_object(bucket_name: str, object_key: str) -> Generator[bytes, None, None]:
     client = get_s3_client()
+    _ensure_bucket_exists(client, bucket_name)
     response = client.get_object(Bucket=bucket_name, Key=object_key)
     stream = response["Body"]
     try:

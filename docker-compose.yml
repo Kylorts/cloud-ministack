@@ -24,6 +24,7 @@ services:
       PERSIST_STATE: "1"
     volumes:
       - ministack_data:/var/lib/ministack
+      - ministack_tmp:/tmp/ministack
     healthcheck:
       test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:4566/_ministack/health')\" 2>/dev/null || exit 1"]
       interval: 15s
@@ -68,3 +69,4 @@ services:
 volumes:
   db_data:
   ministack_data:
+  ministack_tmp:

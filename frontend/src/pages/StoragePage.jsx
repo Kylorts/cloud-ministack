@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Navbar from '../components/Navbar'
-import { getBuckets, createBucket, deleteBucket } from '../services/storage'
+import { getBuckets, createBucket, deleteBucket, getStorageUsage } from '../services/storage'
 import { getMySubscription } from '../services/subscriptions'
 import './StoragePage.css'
 
@@ -44,11 +44,28 @@ function formatDate(dateStr) {
 }
 
 /* ── Modal Buat Bucket ── */
-function CreateBucketModal({ onClose, onSuccess }) {
+function validateBucketName(val) {
+  if (!val) return ''
+  if (val.length < 3) return 'Nama bucket minimal 3 karakter'
+  if (val.length > 63) return 'Nama bucket maksimal 63 karakter'
+  if (val.startsWith('-')) return 'Nama bucket tidak boleh diawali tanda hubung (-)'
+  if (val.endsWith('-')) return 'Nama bucket tidak boleh diakhiri tanda hubung (-)'
+  if (val.includes('--')) return 'Nama bucket tidak boleh mengandung dua tanda hubung berturutan'
+  return ''
+}
+
+function CreateBucketModal({ onClose, onSuccess, currentBuckets, bucketLimit }) {
   const [name, setName] = useState('')
   const [visibility, setVisibility] = useState('private')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [nameError, setNameError] = useState('')
+
+  function handleNameChange(e) {
+    const val = e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '')
+    setName(val)
+    setNameError(validateBucketName(val))
+  }
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -58,7 +75,14 @@ function CreateBucketModal({ onClose, onSuccess }) {
       await createBucket({ display_name: name, visibility })
       onSuccess()
     } catch (err) {
-      setError(err.response?.data?.detail || 'Gagal membuat bucket')
+      const detail = err.response?.data?.detail
+      if (Array.isArray(detail)) {
+        // FastAPI validation error → ambil pesan pertama
+        const msg = detail[0]?.msg || 'Data tidak valid'
+        setError(msg.replace('Value error, ', ''))
+      } else {
+        setError(typeof detail === 'string' ? detail : 'Gagal membuat bucket')
+      }
     } finally {
       setLoading(false)
     }
@@ -76,14 +100,17 @@ function CreateBucketModal({ onClose, onSuccess }) {
           <div className="modal-field">
             <label className="modal-label">Nama Bucket</label>
             <input
-              className="modal-input"
+              className={`modal-input ${nameError ? 'modal-input--error' : name.length >= 3 ? 'modal-input--valid' : ''}`}
               type="text"
               placeholder="huruf kecil, angka, dan strip"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={handleNameChange}
               required
             />
-            <span className="modal-hint">Gunakan nama yang unik secara global. Contoh: bucket-aset-proyek-01</span>
+            {nameError
+              ? <span className="modal-hint modal-hint--error">⚠ {nameError}</span>
+              : <span className="modal-hint">Gunakan nama yang unik secara global. Contoh: bucket-aset-proyek-01</span>
+            }
           </div>
 
           <div className="modal-field">
@@ -99,11 +126,18 @@ function CreateBucketModal({ onClose, onSuccess }) {
             <span className="modal-hint">Pengaturan visibilitas dapat diubah kapan saja melalui panel kontrol.</span>
           </div>
 
+          {bucketLimit > 0 && (
+            <div className={`modal-quota-info ${currentBuckets >= bucketLimit - 1 ? 'modal-quota-info--warn' : ''}`}>
+              Bucket terpakai: <strong>{currentBuckets} / {bucketLimit}</strong>
+              {currentBuckets === bucketLimit - 1 && ' — ini bucket terakhir Anda'}
+            </div>
+          )}
+
           {error && <div className="modal-error">{error}</div>}
 
           <div className="modal-actions">
             <button type="button" className="modal-btn-cancel" onClick={onClose}>Batal</button>
-            <button type="submit" className="modal-btn-submit" disabled={loading}>
+            <button type="submit" className="modal-btn-submit" disabled={loading || !!nameError || name.length < 3}>
               {loading ? 'Membuat...' : 'Buat Bucket'}
             </button>
           </div>
@@ -117,6 +151,7 @@ function CreateBucketModal({ onClose, onSuccess }) {
 export default function StoragePage() {
   const [buckets, setBuckets] = useState([])
   const [subscription, setSubscription] = useState(null)
+  const [usage, setUsage] = useState(null)
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [showModal, setShowModal] = useState(false)
@@ -129,9 +164,11 @@ export default function StoragePage() {
         return { data: [] }
       }),
       getMySubscription().catch(() => ({ data: null })),
-    ]).then(([bucketsRes, subRes]) => {
+      getStorageUsage().catch(() => ({ data: null })),
+    ]).then(([bucketsRes, subRes, usageRes]) => {
       setBuckets(bucketsRes.data)
       setSubscription(subRes.data)
+      setUsage(usageRes.data)
     })
   }
 
@@ -143,10 +180,14 @@ export default function StoragePage() {
     b.display_name.toLowerCase().includes(search.toLowerCase())
   )
 
-  const storageUsed = 0
-  const storageLimit = subscription?.plan?.storage_limit_bytes ?? 0
-  const storagePercent = storageLimit ? Math.round((storageUsed / storageLimit) * 100) : 0
+  const storageUsed = usage?.storage_used_bytes ?? 0
+  const storageLimit = usage?.storage_limit_bytes ?? subscription?.plan?.storage_limit_bytes ?? 0
+  const storagePercent = usage?.storage_percent ?? 0
   const storageLeft = storageLimit - storageUsed
+  const storageAlmostFull = storagePercent >= 80
+  const storageFullFull = storagePercent >= 100
+  const bucketLimit = usage?.bucket_limit ?? subscription?.plan?.bucket_limit ?? 0
+  const bucketLimitReached = bucketLimit > 0 && buckets.length >= bucketLimit
 
   if (loading) return <div className="storage-loading">Memuat data storage...</div>
 
@@ -163,10 +204,37 @@ export default function StoragePage() {
             <h1 className="storage-title">Object Storage</h1>
             <p className="storage-subtitle">Kelola infrastruktur penyimpanan data cloud Anda dengan efisien.</p>
           </div>
-          <button className="btn-create-bucket" onClick={() => setShowModal(true)}>
-            <PlusIcon /> Buat Bucket
-          </button>
+          {bucketLimitReached ? (
+            <div className="bucket-limit-badge" title={`Batas bucket paket Anda (${bucketLimit}) sudah tercapai`}>
+              <span>Batas Bucket Tercapai</span>
+            </div>
+          ) : (
+            <button className="btn-create-bucket" onClick={() => setShowModal(true)}>
+              <PlusIcon /> Buat Bucket
+            </button>
+          )}
         </div>
+
+        {bucketLimitReached && (
+          <div className="storage-warning-banner">
+            ⚠ Anda telah mencapai batas {bucketLimit} bucket untuk paket <strong>{subscription?.plan?.name}</strong>.
+            {' '}<a href="/paket" className="storage-warning-link">Upgrade paket</a> untuk menambah kapasitas bucket.
+          </div>
+        )}
+
+        {storageFullFull && (
+          <div className="storage-warning-banner storage-warning-banner--danger">
+            Kuota storage Anda sudah penuh ({formatBytes(storageUsed)} / {formatBytes(storageLimit)}).
+            {' '}<a href="/paket" className="storage-warning-link">Upgrade paket</a> untuk menambah kapasitas.
+          </div>
+        )}
+
+        {!storageFullFull && storageAlmostFull && (
+          <div className="storage-warning-banner">
+            ⚠ Kuota storage hampir penuh ({storagePercent}% terpakai). Sisa: {formatBytes(storageLeft)}.
+            {' '}<a href="/paket" className="storage-warning-link">Upgrade paket</a> sebelum penuh.
+          </div>
+        )}
 
         {/* Stat Cards */}
         <div className="storage-stats">
@@ -289,6 +357,8 @@ export default function StoragePage() {
         <CreateBucketModal
           onClose={() => setShowModal(false)}
           onSuccess={() => { setShowModal(false); loadData() }}
+          currentBuckets={buckets.length}
+          bucketLimit={bucketLimit}
         />
       )}
     </div>

@@ -130,7 +130,15 @@
   border: 1px solid #e5e7eb;
   border-radius: var(--radius-md);
   overflow: hidden;
+  table-layout: fixed;
 }
+
+/* Column widths */
+.bucket-table colgroup col:nth-child(1) { width: auto; }     /* Nama File — sisanya */
+.bucket-table colgroup col:nth-child(2) { width: 100px; }    /* Ukuran */
+.bucket-table colgroup col:nth-child(3) { width: 110px; }    /* Tipe File */
+.bucket-table colgroup col:nth-child(4) { width: 160px; }    /* Diunggah Pada */
+.bucket-table colgroup col:nth-child(5) { width: 90px; }     /* Aksi */
 
 .bucket-table thead tr { background: #f9fafb; }
 
@@ -146,12 +154,19 @@
   border-bottom: 1px solid #e5e7eb;
 }
 
+/* Kolom Aksi — rata tengah */
+.bucket-table th:last-child,
+.bucket-table td:last-child {
+  text-align: center;
+}
+
 .bucket-table td {
   padding: 14px 16px;
   border-bottom: 1px solid #f3f4f6;
   font-size: 13px;
   font-family: var(--font-ui);
   color: var(--color-dark);
+  vertical-align: middle;
 }
 
 .bucket-table tbody tr:last-child td { border-bottom: none; }
@@ -201,17 +216,20 @@
   display: flex;
   gap: 6px;
   align-items: center;
+  justify-content: center;
 }
 
 .file-action-btn {
-  width: 28px;
-  height: 28px;
+  width: 36px;
+  height: 36px;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: var(--radius-sm);
   transition: background 0.15s;
 }
+
+.file-action-btn svg { width: 16px; height: 16px; }
 
 .file-action-btn--download { color: #2563eb; }
 .file-action-btn--download:hover { background: #eff6ff; }
@@ -288,10 +306,74 @@
   color: var(--color-dark);
 }
 
-.modal-file-input {
-  font-size: 13px;
+/* Drop Zone */
+.drop-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 2px dashed #d1d5db;
+  border-radius: var(--radius-md);
+  padding: 36px 20px;
+  margin-bottom: 16px;
+  cursor: pointer;
+  text-align: center;
+  transition: border-color 0.2s, background 0.2s;
+  background: #fafafa;
+}
+.drop-zone:hover {
+  border-color: #9ca3af;
+  background: #f3f4f6;
+}
+.drop-zone--active {
+  border-color: var(--color-dark);
+  background: #f0faf0;
+}
+.drop-zone--has-file {
+  border-color: #16a34a;
+  background: #f0fdf4;
+}
+
+.drop-zone-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: #f3f4f6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 4px;
+}
+.drop-zone-icon--file { background: #dcfce7; }
+
+.drop-zone-text {
+  font-size: 14px;
+  font-weight: 600;
   font-family: var(--font-ui);
   color: var(--color-dark);
+}
+
+.drop-zone-filename {
+  font-size: 14px;
+  font-weight: 600;
+  font-family: var(--font-ui);
+  color: #16a34a;
+  word-break: break-all;
+  max-width: 300px;
+}
+
+.drop-zone-sub {
+  font-size: 12px;
+  font-family: var(--font-ui);
+  color: #9ca3af;
+}
+
+.drop-zone-browse {
+  color: var(--color-dark);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  font-weight: 500;
 }
 
 .modal-hint {
@@ -341,6 +423,61 @@
 }
 .modal-btn-submit:hover { opacity: 0.88; }
 .modal-btn-submit:disabled { opacity: 0.5; cursor: default; }
+
+.modal-btn-delete {
+  padding: 9px 20px;
+  background: #dc2626;
+  color: #fff;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--font-ui);
+}
+.modal-btn-delete:hover { opacity: 0.88; }
+.modal-btn-delete:disabled { opacity: 0.5; cursor: default; }
+
+/* Delete confirm body */
+.delete-confirm-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 8px;
+  padding: 8px 0 20px;
+}
+
+.delete-confirm-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: #fef2f2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 4px;
+}
+
+.delete-confirm-text {
+  font-size: 15px;
+  font-weight: 600;
+  font-family: var(--font-ui);
+  color: var(--color-dark);
+}
+
+.delete-confirm-filename {
+  font-size: 13px;
+  font-family: var(--font-ui);
+  color: #374151;
+  word-break: break-all;
+  max-width: 320px;
+  font-style: italic;
+}
+
+.delete-confirm-warn {
+  font-size: 12px;
+  font-family: var(--font-ui);
+  color: #dc2626;
+}
 
 /* Footer */
 .bucket-footer {

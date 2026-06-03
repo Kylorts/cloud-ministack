@@ -52,6 +52,32 @@ def _make_internal_name(user_id: int, display_name: str, db: Session) -> str:
     return candidate
 
 
+@router.get("/usage")
+def get_storage_usage(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    sub = _get_active_subscription(current_user.id, db)
+    used_bytes = _get_storage_used_bytes(current_user.id, db)
+    bucket_count = (
+        db.query(StorageBucket)
+        .filter(
+            StorageBucket.user_id == current_user.id,
+            StorageBucket.status.in_([BucketStatus.creating, BucketStatus.active]),
+        )
+        .count()
+    )
+    return {
+        "storage_used_bytes": used_bytes,
+        "storage_limit_bytes": sub.plan.storage_limit_bytes,
+        "storage_percent": round((used_bytes / sub.plan.storage_limit_bytes) * 100, 1) if sub.plan.storage_limit_bytes else 0,
+        "bucket_count": bucket_count,
+        "bucket_limit": sub.plan.bucket_limit,
+        "max_file_size_bytes": sub.plan.max_file_size_bytes,
+        "bandwidth_limit_bytes": sub.plan.bandwidth_limit_bytes,
+    }
+
+
 @router.get("/buckets", response_model=list[BucketResponse])
 def list_buckets(
     current_user: User = Depends(get_current_user),
@@ -173,19 +199,45 @@ def list_objects(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _get_active_subscription(current_user.id, db)
-    _get_bucket_or_404(bucket_id, current_user.id, db)
+    from botocore.exceptions import ClientError as BotoClientError
+    from app.core.ministack import get_s3_client, _ensure_bucket_exists
 
-    objects = (
+    _get_active_subscription(current_user.id, db)
+    bucket = _get_bucket_or_404(bucket_id, current_user.id, db)
+
+    db_objects = (
         db.query(StorageObject)
         .filter(
             StorageObject.bucket_id == bucket_id,
             StorageObject.status == ObjectStatus.available,
         )
-        .order_by(StorageObject.uploaded_at.desc())
         .all()
     )
-    return objects
+
+    if db_objects:
+        # Sinkronisasi dengan MiniStack — 1 API call untuk semua file
+        s3 = get_s3_client()
+        try:
+            _ensure_bucket_exists(s3, bucket.internal_name)
+            response = s3.list_objects_v2(Bucket=bucket.internal_name)
+            existing_keys = {
+                obj["Key"]
+                for obj in response.get("Contents", [])
+            }
+            # Hapus dari DB file yang tidak ada di MiniStack
+            cleaned = []
+            for obj in db_objects:
+                if obj.object_key in existing_keys:
+                    cleaned.append(obj)
+                else:
+                    db.delete(obj)
+            if len(cleaned) < len(db_objects):
+                db.commit()
+            db_objects = cleaned
+        except BotoClientError:
+            pass  # Jika MiniStack tidak bisa diakses, tetap tampilkan dari DB
+
+    return sorted(db_objects, key=lambda o: o.uploaded_at or o.created_at, reverse=True)
 
 
 @router.post(
@@ -271,14 +323,28 @@ def download_file(
     if not obj:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File tidak ditemukan")
 
-    try:
-        stream = download_object(bucket.internal_name, obj.object_key)
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Gagal mengunduh file dari MiniStack: {str(e)}",
-        )
+    # Cek keberadaan file di MiniStack SEBELUM streaming dimulai
+    # agar error bisa di-handle dengan benar (setelah StreamingResponse dimulai sudah 200)
+    from botocore.exceptions import ClientError as BotoClientError
+    from app.core.ministack import get_s3_client, _ensure_bucket_exists
 
+    s3 = get_s3_client()
+    try:
+        _ensure_bucket_exists(s3, bucket.internal_name)
+        s3.head_object(Bucket=bucket.internal_name, Key=obj.object_key)
+    except BotoClientError as e:
+        code = e.response["Error"]["Code"]
+        if code in ("404", "NoSuchKey"):
+            # File tidak ada di MiniStack — hapus permanen dari database
+            db.delete(obj)
+            db.commit()
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="File tidak ditemukan di storage dan telah dihapus dari sistem.",
+            )
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e))
+
+    stream = download_object(bucket.internal_name, obj.object_key)
     return StreamingResponse(
         stream,
         media_type=obj.content_type or "application/octet-stream",

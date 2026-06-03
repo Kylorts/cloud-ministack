@@ -1,5 +1,8 @@
 import api from './api'
 
+// Usage
+export const getStorageUsage = () => api.get('/storage/usage')
+
 // Buckets
 export const getBuckets = () => api.get('/storage/buckets')
 export const createBucket = (data) => api.post('/storage/buckets', data)
