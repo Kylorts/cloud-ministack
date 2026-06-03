@@ -124,7 +124,10 @@ export default function StoragePage() {
 
   function loadData() {
     return Promise.all([
-      getBuckets(),
+      getBuckets().catch((err) => {
+        if (err.response?.status === 403) navigate('/paket', { replace: true })
+        return { data: [] }
+      }),
       getMySubscription().catch(() => ({ data: null })),
     ]).then(([bucketsRes, subRes]) => {
       setBuckets(bucketsRes.data)

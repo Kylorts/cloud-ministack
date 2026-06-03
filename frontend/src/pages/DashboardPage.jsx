@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { logout, getStoredUser } from '../services/auth'
 import { getMySubscription } from '../services/subscriptions'
@@ -103,18 +103,41 @@ function CircularProgress({ value, size = 140 }) {
   )
 }
 
+/* ── Modal Belum Berlangganan ───────────────────────────────── */
+function NoSubModal({ onClose, onGoToPaket }) {
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+        <button className="modal-close-x" onClick={onClose} aria-label="Tutup">✕</button>
+        <div className="modal-icon">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none">
+            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" stroke="#062F28" strokeWidth="1.5"/>
+            <path d="M12 8v4M12 16h.01" stroke="#062F28" strokeWidth="2" strokeLinecap="round"/>
+          </svg>
+        </div>
+        <h3 className="modal-heading">Belum Berlangganan</h3>
+        <p className="modal-desc">
+          Anda perlu memilih paket layanan terlebih dahulu untuk menggunakan Object Storage.
+        </p>
+        <button className="modal-btn-primary modal-btn-full" onClick={onGoToPaket}>Pilih Paket</button>
+      </div>
+    </div>
+  )
+}
+
 /* ── Page Component ─────────────────────────────────────────── */
 export default function DashboardPage() {
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const [subscription, setSubscription] = useState(null)
   const [buckets, setBuckets] = useState([])
+  const [showNoSubModal, setShowNoSubModal] = useState(false)
   const dropdownRef = useRef(null)
   const navigate = useNavigate()
   const user = getStoredUser()
 
   useEffect(() => {
     getMySubscription().then((r) => setSubscription(r.data)).catch(() => {})
-    getBuckets().then((r) => setBuckets(r.data)).catch(() => {})
+    getBuckets().then((r) => setBuckets(r.data)).catch(() => setBuckets([]))
   }, [])
 
   useEffect(() => {
@@ -126,6 +149,15 @@ export default function DashboardPage() {
   }, [])
 
   function handleLogout() { logout(); navigate('/login') }
+
+  function handleStorageClick(e) {
+    e.preventDefault()
+    if (!subscription) {
+      setShowNoSubModal(true)
+    } else {
+      navigate('/storage')
+    }
+  }
 
   const storageLimit = subscription?.plan?.storage_limit_bytes ?? 0
   const storagePercent = 0 // akan diisi saat usage tracking ada
@@ -181,7 +213,7 @@ export default function DashboardPage() {
         {/* Stats Grid */}
         <div className="stats-grid">
           {/* Storage Card → klik ke /storage */}
-          <div className="stat-card stat-card--clickable" onClick={() => navigate('/storage')}>
+          <div className="stat-card stat-card--clickable" onClick={handleStorageClick}>
             <div className="stat-card-header">
               <div>
                 <p className="stat-label">Kuota Penyimpanan</p>
@@ -279,55 +311,67 @@ export default function DashboardPage() {
           <div className="table-card">
             <div className="table-card-header">
               <h2 className="table-card-title">Object Storage</h2>
-              <Link to="/storage" className="table-link">
-                Lihat Semua <ExternalLinkIcon />
-              </Link>
+              {subscription && (
+                <Link to="/storage" className="table-link">
+                  Lihat Semua <ExternalLinkIcon />
+                </Link>
+              )}
             </div>
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Nama Bucket</th>
-                  <th>Visibilitas</th>
-                  <th>Status</th>
-                  <th>Aksi</th>
-                </tr>
-              </thead>
-              <tbody>
-                {buckets.length === 0 ? (
+            {!subscription ? (
+              <div className="table-no-sub">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
+                  <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" stroke="#d1d5db" strokeWidth="1.5"/>
+                </svg>
+                <p className="table-no-sub-text">Anda belum berlangganan.</p>
+                <button className="table-no-sub-btn" onClick={() => navigate('/paket')}>Pilih Paket →</button>
+              </div>
+            ) : (
+              <table className="data-table">
+                <thead>
                   <tr>
-                    <td colSpan={4} style={{ textAlign: 'center', padding: '24px', color: '#9ca3af', fontSize: '13px' }}>
-                      Belum ada bucket.{' '}
-                      <Link to="/storage" style={{ color: '#062F28', fontWeight: 600 }}>Buat bucket pertama →</Link>
-                    </td>
+                    <th>Nama Bucket</th>
+                    <th>Visibilitas</th>
+                    <th>Status</th>
+                    <th>Aksi</th>
                   </tr>
-                ) : (
-                  buckets.slice(0, 3).map((b) => (
-                    <tr key={b.id}>
-                      <td>
-                        <div className="resource-name-cell">
-                          <span className="resource-dot" />
-                          <div>
-                            <span className="resource-name">{b.display_name}</span>
-                            <span className="resource-id">{b.internal_name}</span>
-                          </div>
-                        </div>
-                      </td>
-                      <td>
-                        <span className={`badge badge--${b.visibility === 'public' ? 'ec2' : 'minio'}`}>
-                          {b.visibility === 'public' ? 'Publik' : 'Pribadi'}
-                        </span>
-                      </td>
-                      <td className="util-cell">{b.status === 'active' ? '● Aktif' : b.status}</td>
-                      <td>
-                        <button className="action-btn" onClick={() => navigate(`/storage/buckets/${b.id}`)}>
-                          Buka
-                        </button>
+                </thead>
+                <tbody>
+                  {buckets.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} style={{ textAlign: 'center', padding: '24px', color: '#9ca3af', fontSize: '13px' }}>
+                        Belum ada bucket.{' '}
+                        <Link to="/storage" style={{ color: '#062F28', fontWeight: 600 }}>Buat bucket pertama →</Link>
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                  ) : (
+                    buckets.slice(0, 3).map((b) => (
+                      <tr key={b.id}>
+                        <td>
+                          <div className="resource-name-cell">
+                            <span className="resource-dot" />
+                            <div>
+                              <span className="resource-name">{b.display_name}</span>
+                              <span className="resource-id">{b.internal_name}</span>
+                            </div>
+                          </div>
+                        </td>
+                        <td>
+                          <span className={`badge badge--${b.visibility === 'public' ? 'ec2' : 'minio'}`}>
+                            {b.visibility === 'public' ? 'Publik' : 'Pribadi'}
+                          </span>
+                        </td>
+                        <td className="util-cell">{b.status === 'active' ? '● Aktif' : b.status}</td>
+                        <td>
+                          <button className="action-btn" onClick={() => navigate(`/storage/buckets/${b.id}`)}>
+                            Buka
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            )}
           </div>
 
           {/* Quick Links */}
@@ -336,14 +380,14 @@ export default function DashboardPage() {
               <h2 className="table-card-title">Navigasi Cepat</h2>
             </div>
             <div className="quick-links">
-              <Link to="/storage" className="quick-link-item">
+              <a href="/storage" className="quick-link-item" onClick={handleStorageClick}>
                 <span className="quick-link-icon"><BucketIcon /></span>
                 <div className="quick-link-text">
                   <span className="quick-link-title">Object Storage</span>
                   <span className="quick-link-desc">Kelola bucket dan file Anda</span>
                 </div>
                 <ExternalLinkIcon />
-              </Link>
+              </a>
               <Link to="/paket" className="quick-link-item">
                 <span className="quick-link-icon"><PackageIcon /></span>
                 <div className="quick-link-text">
@@ -360,14 +404,16 @@ export default function DashboardPage() {
                 </div>
                 <ExternalLinkIcon />
               </Link>
-              <Link to="/kuota" className="quick-link-item">
-                <span className="quick-link-icon"><ShieldIcon /></span>
-                <div className="quick-link-text">
-                  <span className="quick-link-title">Penggunaan & Kuota</span>
-                  <span className="quick-link-desc">Monitor pemakaian resource</span>
-                </div>
-                <ExternalLinkIcon />
-              </Link>
+              {subscription && (
+                <Link to="/kuota" className="quick-link-item">
+                  <span className="quick-link-icon"><ShieldIcon /></span>
+                  <div className="quick-link-text">
+                    <span className="quick-link-title">Penggunaan & Kuota</span>
+                    <span className="quick-link-desc">Monitor pemakaian resource</span>
+                  </div>
+                  <ExternalLinkIcon />
+                </Link>
+              )}
             </div>
           </div>
         </div>
@@ -382,6 +428,13 @@ export default function DashboardPage() {
           <a href="#">Syarat &amp; Ketentuan</a>
         </div>
       </footer>
+
+      {showNoSubModal && (
+        <NoSubModal
+          onClose={() => setShowNoSubModal(false)}
+          onGoToPaket={() => navigate('/paket')}
+        />
+      )}
     </div>
   )
 }

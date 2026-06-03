@@ -58,10 +58,12 @@ export default function LanggananPage() {
       ]} />
 
       <main className="langganan-main">
-        <div className="langganan-header">
-          <h1 className="langganan-title">Detail Langganan</h1>
-          <p className="langganan-subtitle">Kelola paket, metode pembayaran, dan siklus penagihan Anda.</p>
-        </div>
+        {subscription && (
+          <div className="langganan-header">
+            <h1 className="langganan-title">Detail Langganan</h1>
+            <p className="langganan-subtitle">Kelola paket, metode pembayaran, dan siklus penagihan Anda.</p>
+          </div>
+        )}
 
         {error && <div className="langganan-error">{error}</div>}
 

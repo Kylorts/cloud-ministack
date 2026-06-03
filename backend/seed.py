@@ -5,6 +5,9 @@ Run: python seed.py
 from app.database import SessionLocal
 from app.models.user import User, UserRole, UserStatus
 from app.models.plan import ServicePlan, BillingPeriod
+from app.models.subscription import Subscription       # noqa: F401 — wajib agar relasi SQLAlchemy resolve
+from app.models.storage_bucket import StorageBucket    # noqa: F401
+from app.models.storage_object import StorageObject    # noqa: F401
 from app.core.security import hash_password
 
 # 1 GB  = 1_073_741_824 bytes

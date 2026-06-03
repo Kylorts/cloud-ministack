@@ -141,8 +141,12 @@ export default function BucketDetailPage() {
 
   function loadData() {
     return Promise.all([
-      getBucket(id),
-      getObjects(id),
+      getBucket(id).catch((err) => {
+        if (err.response?.status === 403) navigate('/paket', { replace: true })
+        if (err.response?.status === 404) navigate('/storage', { replace: true })
+        return { data: null }
+      }),
+      getObjects(id).catch(() => ({ data: [] })),
     ]).then(([bucketRes, objRes]) => {
       setBucket(bucketRes.data)
       setObjects(objRes.data)
