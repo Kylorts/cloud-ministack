@@ -46,41 +46,55 @@ function formatDate(dateStr) {
   return `${time} · ${date}`
 }
 
-function getFileTypeBadge(contentType) {
+function getExtension(filename) {
+  return filename?.split('.').pop()?.toLowerCase() ?? ''
+}
+
+function getFileTypeBadge(contentType, filename = '') {
+  const ext = getExtension(filename)
+
+  // Deteksi dari ekstensi file (lebih akurat untuk Office formats)
+  const extMap = {
+    xlsx: 'XLSX', xls: 'XLS', csv: 'CSV',
+    docx: 'DOCX', doc: 'DOC',
+    pptx: 'PPTX', ppt: 'PPT',
+    pdf: 'PDF', txt: 'TXT', md: 'MD',
+    png: 'PNG', jpg: 'JPG', jpeg: 'JPG', gif: 'GIF', webp: 'WEBP', svg: 'SVG',
+    mp4: 'MP4', mov: 'MOV', avi: 'AVI', mkv: 'MKV',
+    mp3: 'MP3', wav: 'WAV',
+    zip: 'ZIP', rar: 'RAR', gz: 'GZ', tar: 'TAR',
+    json: 'JSON', xml: 'XML', yaml: 'YAML', yml: 'YAML',
+    html: 'HTML', css: 'CSS', js: 'JS', ts: 'TS',
+    sql: 'SQL', db: 'DB',
+  }
+  if (extMap[ext]) return extMap[ext]
+
+  // Fallback dari content type
   if (!contentType || contentType.includes('octet-stream')) return 'FILE'
   if (contentType.includes('pdf')) return 'PDF'
   if (contentType.includes('html')) return 'HTML'
   if (contentType.includes('css')) return 'CSS'
   if (contentType.includes('javascript')) return 'JS'
   if (contentType.includes('json')) return 'JSON'
-  if (contentType.includes('xml')) return 'XML'
   if (contentType.includes('zip')) return 'ZIP'
-  if (contentType.includes('rar')) return 'RAR'
   if (contentType.includes('png')) return 'PNG'
-  if (contentType.includes('jpeg') || contentType.includes('jpg')) return 'JPG'
+  if (contentType.includes('jpeg')) return 'JPG'
   if (contentType.includes('gif')) return 'GIF'
-  if (contentType.includes('webp')) return 'WEBP'
-  if (contentType.includes('svg')) return 'SVG'
   if (contentType.includes('mp4')) return 'MP4'
   if (contentType.includes('mp3')) return 'MP3'
   if (contentType.includes('text/plain')) return 'TXT'
   if (contentType.includes('image')) return 'IMG'
   if (contentType.includes('video')) return 'VIDEO'
   if (contentType.includes('audio')) return 'AUDIO'
-  const sub = contentType.split('/')[1]?.toUpperCase() ?? 'FILE'
-  return sub.length > 6 ? 'FILE' : sub
+  if (contentType.includes('xml')) return 'XML'
+  return 'FILE'
 }
 
-function FileTypeIcon({ contentType }) {
-  const type = contentType ?? ''
-  let color = '#6b7280'
-  if (type.includes('html')) color = '#e34c26'
-  else if (type.includes('css')) color = '#264de4'
-  else if (type.includes('image')) color = '#10b981'
-  else if (type.includes('javascript')) color = '#f59e0b'
+function FileTypeIcon({ contentType, filename }) {
+  const color = '#6b7280'
   return (
-    <span className="file-type-icon" style={{ background: color + '18', color }}>
-      {getFileTypeBadge(contentType).slice(0, 4)}
+    <span className="file-type-icon" style={{ background: '#f3f4f6', color }}>
+      {getFileTypeBadge(contentType, filename).slice(0, 4)}
     </span>
   )
 }
@@ -292,6 +306,23 @@ export default function BucketDetailPage() {
 
   const totalSize = objects.reduce((acc, o) => acc + (o.size_bytes ?? 0), 0)
 
+  // ── Search & Pagination ──
+  const [search, setSearch] = useState('')
+  const [page, setPage] = useState(1)
+  const PAGE_SIZE = 10
+
+  const filtered = objects.filter((o) =>
+    o.filename.toLowerCase().includes(search.toLowerCase())
+  )
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const currentPage = Math.min(page, totalPages)
+  const paginated = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
+
+  function handleSearch(val) {
+    setSearch(val)
+    setPage(1)
+  }
+
   if (loading) return <div className="bucket-loading">Memuat bucket...</div>
   if (!bucket) return <div className="bucket-loading">Bucket tidak ditemukan.</div>
 
@@ -348,6 +379,28 @@ export default function BucketDetailPage() {
           </div>
         </div>
 
+        {/* Search bar */}
+        <div className="bucket-table-toolbar">
+          <div className="bucket-search">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+              <path d="M21 21L16.514 16.506M19 10.5C19 15.194 15.194 19 10.5 19C5.806 19 2 15.194 2 10.5C2 5.806 5.806 2 10.5 2C15.194 2 19 5.806 19 10.5Z" stroke="#9CA3AF" strokeWidth="2" strokeLinecap="round"/>
+            </svg>
+            <input
+              type="text"
+              className="bucket-search-input"
+              placeholder="Cari file..."
+              value={search}
+              onChange={(e) => handleSearch(e.target.value)}
+            />
+            {search && (
+              <button className="bucket-search-clear" onClick={() => handleSearch('')}>✕</button>
+            )}
+          </div>
+          <span className="bucket-table-count">
+            {filtered.length} dari {objects.length} file
+          </span>
+        </div>
+
         {/* File table */}
         <table className="bucket-table">
           <colgroup>
@@ -363,24 +416,23 @@ export default function BucketDetailPage() {
             </tr>
           </thead>
           <tbody>
-            {objects.length === 0 ? (
+            {paginated.length === 0 ? (
               <tr>
                 <td colSpan={5} className="bucket-table-empty">
-                  Belum ada file. Unggah file pertama Anda.
+                  {search ? `Tidak ada file yang cocok dengan "${search}"` : 'Belum ada file. Unggah file pertama Anda.'}
                 </td>
               </tr>
             ) : (
-              objects.map((obj) => (
+              paginated.map((obj) => (
                 <tr key={obj.id}>
                   <td>
                     <div className="file-name-cell">
-                      <FileTypeIcon contentType={obj.content_type} />
                       <span className="file-name">{obj.filename}</span>
                     </div>
                   </td>
                   <td className="file-meta">{formatBytes(obj.size_bytes)}</td>
                   <td>
-                    <span className="file-type-badge">{getFileTypeBadge(obj.content_type)}</span>
+                    <span className="file-type-badge">{getFileTypeBadge(obj.content_type, obj.filename)}</span>
                   </td>
                   <td className="file-meta">{formatDate(obj.uploaded_at)}</td>
                   <td>
@@ -408,9 +460,47 @@ export default function BucketDetailPage() {
           </tbody>
         </table>
 
-        {objects.length > 0 && (
-          <div className="bucket-table-footer">
-            Menampilkan {objects.length} file
+        {/* Pagination */}
+        {filtered.length > 0 && (
+          <div className="bucket-pagination">
+            <span className="pagination-info">
+              {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, filtered.length)} dari {filtered.length} file
+            </span>
+            <div className="pagination-controls">
+              <button
+                className="pagination-btn"
+                disabled={currentPage === 1}
+                onClick={() => setPage((p) => p - 1)}
+              >
+                ‹ Sebelumnya
+              </button>
+
+              {Array.from({ length: totalPages }, (_, i) => i + 1)
+                .filter((p) => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
+                .reduce((acc, p, idx, arr) => {
+                  if (idx > 0 && p - arr[idx - 1] > 1) acc.push('...')
+                  acc.push(p)
+                  return acc
+                }, [])
+                .map((p, idx) =>
+                  p === '...'
+                    ? <span key={`ellipsis-${idx}`} className="pagination-ellipsis">...</span>
+                    : <button
+                        key={p}
+                        className={`pagination-num ${p === currentPage ? 'pagination-num--active' : ''}`}
+                        onClick={() => setPage(p)}
+                      >{p}</button>
+                )
+              }
+
+              <button
+                className="pagination-btn"
+                disabled={currentPage === totalPages}
+                onClick={() => setPage((p) => p + 1)}
+              >
+                Berikutnya ›
+              </button>
+            </div>
           </div>
         )}
       </main>

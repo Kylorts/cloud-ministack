@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import { getMySubscription, cancelSubscription } from '../services/subscriptions'
+import { getStorageUsage } from '../services/storage'
 import './LanggananPage.css'
 
 function formatBytes(bytes) {
@@ -23,16 +24,20 @@ function formatPrice(price) {
 
 export default function LanggananPage() {
   const [subscription, setSubscription] = useState(null)
+  const [usage, setUsage] = useState(null)
   const [loading, setLoading] = useState(true)
   const [cancelling, setCancelling] = useState(false)
   const [error, setError] = useState('')
   const navigate = useNavigate()
 
   useEffect(() => {
-    getMySubscription()
-      .then((res) => setSubscription(res.data))
-      .catch(() => setSubscription(null))
-      .finally(() => setLoading(false))
+    Promise.all([
+      getMySubscription().catch(() => null),
+      getStorageUsage().catch(() => null),
+    ]).then(([subRes, usageRes]) => {
+      setSubscription(subRes?.data ?? null)
+      setUsage(usageRes?.data ?? null)
+    }).finally(() => setLoading(false))
   }, [])
 
   async function handleCancel() {
@@ -125,20 +130,24 @@ export default function LanggananPage() {
                 <div className="lan-usage-item">
                   <div className="lan-usage-row">
                     <span className="lan-usage-label">STORAGE</span>
-                    <span className="lan-usage-value">- / {formatBytes(subscription.plan.storage_limit_bytes)}</span>
+                    <span className="lan-usage-value">
+                      {usage ? formatBytes(usage.storage_used_bytes) : '0 B'} / {formatBytes(subscription.plan.storage_limit_bytes)}
+                    </span>
                   </div>
                   <div className="lan-progress-bar">
-                    <div className="lan-progress-fill" style={{ width: '0%' }} />
+                    <div className="lan-progress-fill" style={{ width: `${usage?.storage_percent ?? 0}%` }} />
                   </div>
+                  <span className="lan-usage-sub">{usage?.storage_percent ?? 0}% terpakai</span>
                 </div>
                 <div className="lan-usage-item">
                   <div className="lan-usage-row">
                     <span className="lan-usage-label">BANDWIDTH</span>
-                    <span className="lan-usage-value">- / {formatBytes(subscription.plan.bandwidth_limit_bytes)}</span>
+                    <span className="lan-usage-value">0 B / {formatBytes(subscription.plan.bandwidth_limit_bytes)}</span>
                   </div>
                   <div className="lan-progress-bar">
                     <div className="lan-progress-fill lan-progress-fill--bandwidth" style={{ width: '0%' }} />
                   </div>
+                  <span className="lan-usage-sub">0% terpakai</span>
                 </div>
               </div>
               <button className="btn-outline-full" onClick={() => navigate('/kuota')}>

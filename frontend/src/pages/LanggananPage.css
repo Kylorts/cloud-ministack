@@ -219,6 +219,13 @@
   background: var(--color-accent);
 }
 
+.lan-usage-sub {
+  font-size: 11px;
+  font-family: var(--font-ui);
+  color: #9ca3af;
+  margin-top: 2px;
+}
+
 /* Buttons */
 .btn-primary {
   background: var(--color-dark);

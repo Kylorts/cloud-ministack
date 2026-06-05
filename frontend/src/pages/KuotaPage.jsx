@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import Navbar from '../components/Navbar'
 import { getMySubscription } from '../services/subscriptions'
-import { getBuckets } from '../services/storage'
+import { getBuckets, getStorageUsage } from '../services/storage'
 import './KuotaPage.css'
 
 function formatBytes(bytes) {
@@ -83,38 +83,36 @@ function CircularMini({ value, color = '#9FE870', size = 56 }) {
 
 export default function KuotaPage() {
   const [subscription, setSubscription] = useState(null)
-  const [buckets, setBuckets] = useState([])
+  const [usage, setUsage] = useState(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     Promise.all([
       getMySubscription().catch(() => ({ data: null })),
-      getBuckets().catch(() => ({ data: [] })),
-    ]).then(([subRes, bucketsRes]) => {
+      getStorageUsage().catch(() => ({ data: null })),
+    ]).then(([subRes, usageRes]) => {
       setSubscription(subRes.data)
-      setBuckets(bucketsRes.data)
+      setUsage(usageRes.data)
     }).finally(() => setLoading(false))
   }, [])
 
   if (loading) return <div className="kuota-loading">Memuat data kuota...</div>
 
   const plan = subscription?.plan
-  const storageLimit = plan?.storage_limit_bytes ?? 0
+  const storageLimit   = usage?.storage_limit_bytes   ?? plan?.storage_limit_bytes   ?? 0
   const bandwidthLimit = plan?.bandwidth_limit_bytes ?? 0
-  const bucketLimit = plan?.bucket_limit ?? 0
+  const bucketLimit    = usage?.bucket_limit          ?? plan?.bucket_limit           ?? 0
   const accessKeyLimit = plan?.access_key_limit ?? 0
 
-  const storageUsed = 0 // akan diperbarui saat usage tracking ada
-  const bandwidthUsed = 0
-  const bucketCount = buckets.length
-  const siteCount = 0
-  const keyCount = 0
+  const storageUsed    = usage?.storage_used_bytes ?? 0
+  const bandwidthUsed  = 0
+  const bucketCount    = usage?.bucket_count ?? 0
+  const keyCount       = 0
 
-  const storagePercent = storageLimit ? Math.round((storageUsed / storageLimit) * 100) : 0
-  const bandwidthPercent = bandwidthLimit ? Math.round((bandwidthUsed / bandwidthLimit) * 100) : 0
-  const bucketPercent = bucketLimit ? Math.round((bucketCount / bucketLimit) * 100) : 0
-  const sitePercent = 0
-  const keyPercent = accessKeyLimit ? Math.round((keyCount / accessKeyLimit) * 100) : 0
+  const storagePercent   = usage?.storage_percent ?? (storageLimit ? Math.round((storageUsed / storageLimit) * 100) : 0)
+  const bandwidthPercent = 0
+  const bucketPercent    = bucketLimit ? Math.round((bucketCount / bucketLimit) * 100) : 0
+  const keyPercent       = accessKeyLimit ? Math.round((keyCount / accessKeyLimit) * 100) : 0
 
   return (
     <div className="kuota-page">
@@ -187,15 +185,6 @@ export default function KuotaPage() {
               </div>
               <CircularMini value={bucketPercent} color="#9FE870" />
               <p className="kuota-resource-sub">{bucketCount} dari {bucketLimit} Bucket</p>
-            </div>
-
-            <div className="kuota-resource-card">
-              <div className="kuota-resource-top">
-                <SiteIcon />
-                <span className="kuota-resource-label">Situs Statis</span>
-              </div>
-              <CircularMini value={sitePercent} color="#3b82f6" />
-              <p className="kuota-resource-sub">{siteCount} dari {plan?.static_site_limit ?? 0} Situs</p>
             </div>
 
             <div className="kuota-resource-card">

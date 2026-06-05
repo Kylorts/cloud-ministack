@@ -32,6 +32,8 @@ class BucketResponse(BaseModel):
     visibility: str
     status: str
     created_at: datetime
+    object_count: int = 0
+    total_size_bytes: int = 0
 
     model_config = {"from_attributes": True}
 

@@ -94,7 +94,26 @@ def list_buckets(
         .order_by(StorageBucket.created_at.desc())
         .all()
     )
-    return buckets
+
+    # Tambah stats per bucket
+    result = []
+    for bucket in buckets:
+        stats = (
+            db.query(
+                func.count(StorageObject.id).label("object_count"),
+                func.coalesce(func.sum(StorageObject.size_bytes), 0).label("total_size_bytes"),
+            )
+            .filter(
+                StorageObject.bucket_id == bucket.id,
+                StorageObject.status == ObjectStatus.available,
+            )
+            .first()
+        )
+        bucket.object_count = stats.object_count if stats else 0
+        bucket.total_size_bytes = int(stats.total_size_bytes) if stats else 0
+        result.append(bucket)
+
+    return result
 
 
 @router.post("/buckets", response_model=BucketDetailResponse, status_code=status.HTTP_201_CREATED)

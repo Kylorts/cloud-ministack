@@ -44,7 +44,7 @@ services:
       DB_NAME: iniawan
       JWT_SECRET_KEY: changeme-super-secret-key-for-iniawan-2026
       JWT_ALGORITHM: HS256
-      JWT_EXPIRE_MINUTES: 60
+      JWT_EXPIRE_MINUTES: 1440
       CORS_ORIGINS: http://localhost:81
       MINISTACK_ENDPOINT: http://ministack:4566
       MINISTACK_ACCESS_KEY: test

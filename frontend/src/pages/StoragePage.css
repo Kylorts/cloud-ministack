@@ -244,7 +244,22 @@
   border: 1px solid #e5e7eb;
   border-radius: var(--radius-md);
   overflow: hidden;
+  table-layout: fixed;
 }
+
+/* Lebar kolom */
+.storage-table th { white-space: nowrap; }
+.storage-table th:nth-child(1) { width: auto; }        /* Nama Bucket */
+.storage-table th:nth-child(2) { width: 110px; }       /* Visibilitas */
+.storage-table th:nth-child(3) { width: 130px; text-align: right; } /* Jumlah Objek */
+.storage-table th:nth-child(4) { width: 130px; text-align: right; } /* Total Ukuran */
+.storage-table th:nth-child(5) { width: 90px; }        /* Status */
+.storage-table th:nth-child(6) { width: 110px; }       /* Dibuat Pada */
+.storage-table th:nth-child(7) { width: 70px; text-align: center; } /* Aksi */
+
+.storage-table td:nth-child(3),
+.storage-table td:nth-child(4) { text-align: right; }
+.storage-table td:nth-child(7) { text-align: center; }
 
 .storage-table thead tr {
   background: #f9fafb;

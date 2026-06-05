@@ -126,13 +126,6 @@ function CreateBucketModal({ onClose, onSuccess, currentBuckets, bucketLimit }) 
             <span className="modal-hint">Pengaturan visibilitas dapat diubah kapan saja melalui panel kontrol.</span>
           </div>
 
-          {bucketLimit > 0 && (
-            <div className={`modal-quota-info ${currentBuckets >= bucketLimit - 1 ? 'modal-quota-info--warn' : ''}`}>
-              Bucket terpakai: <strong>{currentBuckets} / {bucketLimit}</strong>
-              {currentBuckets === bucketLimit - 1 && ' — ini bucket terakhir Anda'}
-            </div>
-          )}
-
           {error && <div className="modal-error">{error}</div>}
 
           <div className="modal-actions">
@@ -204,37 +197,10 @@ export default function StoragePage() {
             <h1 className="storage-title">Object Storage</h1>
             <p className="storage-subtitle">Kelola infrastruktur penyimpanan data cloud Anda dengan efisien.</p>
           </div>
-          {bucketLimitReached ? (
-            <div className="bucket-limit-badge" title={`Batas bucket paket Anda (${bucketLimit}) sudah tercapai`}>
-              <span>Batas Bucket Tercapai</span>
-            </div>
-          ) : (
-            <button className="btn-create-bucket" onClick={() => setShowModal(true)}>
-              <PlusIcon /> Buat Bucket
-            </button>
-          )}
+          <button className="btn-create-bucket" onClick={() => setShowModal(true)}>
+            <PlusIcon /> Buat Bucket
+          </button>
         </div>
-
-        {bucketLimitReached && (
-          <div className="storage-warning-banner">
-            ⚠ Anda telah mencapai batas {bucketLimit} bucket untuk paket <strong>{subscription?.plan?.name}</strong>.
-            {' '}<a href="/paket" className="storage-warning-link">Upgrade paket</a> untuk menambah kapasitas bucket.
-          </div>
-        )}
-
-        {storageFullFull && (
-          <div className="storage-warning-banner storage-warning-banner--danger">
-            Kuota storage Anda sudah penuh ({formatBytes(storageUsed)} / {formatBytes(storageLimit)}).
-            {' '}<a href="/paket" className="storage-warning-link">Upgrade paket</a> untuk menambah kapasitas.
-          </div>
-        )}
-
-        {!storageFullFull && storageAlmostFull && (
-          <div className="storage-warning-banner">
-            ⚠ Kuota storage hampir penuh ({storagePercent}% terpakai). Sisa: {formatBytes(storageLeft)}.
-            {' '}<a href="/paket" className="storage-warning-link">Upgrade paket</a> sebelum penuh.
-          </div>
-        )}
 
         {/* Stat Cards */}
         <div className="storage-stats">
@@ -314,8 +280,8 @@ export default function StoragePage() {
                         {bucket.visibility === 'private' ? 'Pribadi' : 'Publik'}
                       </span>
                     </td>
-                    <td className="storage-table-meta">-</td>
-                    <td className="storage-table-meta">-</td>
+                    <td className="storage-table-meta">{bucket.object_count ?? 0}</td>
+                    <td className="storage-table-meta">{formatBytes(bucket.total_size_bytes ?? 0)}</td>
                     <td>
                       <span className={`status-badge status-badge--${bucket.status}`}>
                         {bucket.status === 'active' ? '● Aktif' : bucket.status}
