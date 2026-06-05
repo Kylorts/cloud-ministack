@@ -241,24 +241,28 @@
 .storage-table {
   width: 100%;
   border-collapse: collapse;
-  border: 1px solid #e5e7eb;
+  border: 1px solid #d1d5db;
   border-radius: var(--radius-md);
   overflow: hidden;
   table-layout: fixed;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
 }
 
 /* Lebar kolom */
 .storage-table th { white-space: nowrap; }
 .storage-table th:nth-child(1) { width: auto; }        /* Nama Bucket */
-.storage-table th:nth-child(2) { width: 110px; }       /* Visibilitas */
-.storage-table th:nth-child(3) { width: 130px; text-align: right; } /* Jumlah Objek */
-.storage-table th:nth-child(4) { width: 130px; text-align: right; } /* Total Ukuran */
-.storage-table th:nth-child(5) { width: 90px; }        /* Status */
-.storage-table th:nth-child(6) { width: 110px; }       /* Dibuat Pada */
-.storage-table th:nth-child(7) { width: 70px; text-align: center; } /* Aksi */
+.storage-table th:nth-child(2) { width: 110px; text-align: center; } /* Visibilitas */
+.storage-table th:nth-child(3) { width: 130px; text-align: center; } /* Jumlah Objek */
+.storage-table th:nth-child(4) { width: 130px; text-align: center; } /* Total Ukuran */
+.storage-table th:nth-child(5) { width: 90px; text-align: center; }  /* Status */
+.storage-table th:nth-child(6) { width: 120px; text-align: center; } /* Dibuat Pada */
+.storage-table th:nth-child(7) { width: 70px; text-align: center; }  /* Aksi */
 
+.storage-table td:nth-child(2),
 .storage-table td:nth-child(3),
-.storage-table td:nth-child(4) { text-align: right; }
+.storage-table td:nth-child(4),
+.storage-table td:nth-child(5),
+.storage-table td:nth-child(6),
 .storage-table td:nth-child(7) { text-align: center; }
 
 .storage-table thead tr {
@@ -302,8 +306,9 @@
   gap: 10px;
 }
 
-.bucket-name {
+.storage-bucket-name {
   font-weight: 500;
+  font-size: 13px;
   color: var(--color-dark);
 }
 

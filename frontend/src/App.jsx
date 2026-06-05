@@ -8,6 +8,9 @@ import LanggananPage from './pages/LanggananPage'
 import StoragePage from './pages/StoragePage'
 import BucketDetailPage from './pages/BucketDetailPage'
 import KuotaPage from './pages/KuotaPage'
+import AktivitasPage from './pages/AktivitasPage'
+import HostingPage from './pages/HostingPage'
+import SiteDetailPage from './pages/SiteDetailPage'
 
 function PrivateRoute({ children }) {
   return isAuthenticated() ? children : <Navigate to="/login" replace />
@@ -52,6 +55,18 @@ export default function App() {
 
       <Route path="/kuota" element={
         <PrivateRoute><KuotaPage /></PrivateRoute>
+      } />
+
+      <Route path="/aktivitas" element={
+        <PrivateRoute><AktivitasPage /></PrivateRoute>
+      } />
+
+      <Route path="/hosting" element={
+        <PrivateRoute><HostingPage /></PrivateRoute>
+      } />
+
+      <Route path="/hosting/sites/:id" element={
+        <PrivateRoute><SiteDetailPage /></PrivateRoute>
       } />
 
       <Route path="/" element={<RoleRoute />} />

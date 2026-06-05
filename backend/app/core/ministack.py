@@ -100,3 +100,42 @@ def get_object_metadata(bucket_name: str, object_key: str) -> dict:
         "content_type": head.get("ContentType", "application/octet-stream"),
         "checksum": head.get("ETag", "").strip('"'),
     }
+
+
+# ── Static Hosting operations ──────────────────────────────────────
+# Semua file hosting disimpan di 1 bucket khusus dengan prefix:
+#   {slug}/{deployment_ref}/{path...}
+
+HOSTING_BUCKET = "jadestack-hosting"
+
+
+def ensure_hosting_bucket() -> None:
+    client = get_s3_client()
+    _ensure_bucket_exists(client, HOSTING_BUCKET)
+
+
+def upload_hosting_file(key: str, data: bytes, content_type: str = "application/octet-stream") -> None:
+    client = get_s3_client()
+    _ensure_bucket_exists(client, HOSTING_BUCKET)
+    client.put_object(Bucket=HOSTING_BUCKET, Key=key, Body=data, ContentType=content_type)
+
+
+def get_hosting_file(key: str) -> tuple[bytes, str]:
+    """Ambil file hosting. Raise ClientError jika tidak ada."""
+    client = get_s3_client()
+    resp = client.get_object(Bucket=HOSTING_BUCKET, Key=key)
+    body = resp["Body"].read()
+    content_type = resp.get("ContentType", "application/octet-stream")
+    return body, content_type
+
+
+def delete_hosting_prefix(prefix: str) -> None:
+    """Hapus semua object di bawah prefix tertentu."""
+    client = get_s3_client()
+    try:
+        resp = client.list_objects_v2(Bucket=HOSTING_BUCKET, Prefix=prefix)
+        keys = [{"Key": o["Key"]} for o in resp.get("Contents", [])]
+        if keys:
+            client.delete_objects(Bucket=HOSTING_BUCKET, Delete={"Objects": keys})
+    except ClientError:
+        pass

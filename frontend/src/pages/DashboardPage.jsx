@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { logout, getStoredUser } from '../services/auth'
+import Sidebar from '../components/Sidebar'
 import { getMySubscription } from '../services/subscriptions'
-import { getBuckets } from '../services/storage'
+import { getBuckets, getStorageUsage } from '../services/storage'
 import './DashboardPage.css'
 
 /* ── Icons ─────────────────────────────────────────────────── */
@@ -80,6 +81,14 @@ function BucketIcon() {
     </svg>
   )
 }
+function ClockIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="9" stroke="#062F28" strokeWidth="1.5" />
+      <path d="M12 7v5l3 2" stroke="#062F28" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
 
 function formatBytes(bytes) {
   if (!bytes) return '0 B'
@@ -131,6 +140,8 @@ export default function DashboardPage() {
   const [subscription, setSubscription] = useState(null)
   const [buckets, setBuckets] = useState([])
   const [showNoSubModal, setShowNoSubModal] = useState(false)
+  const [usage, setUsage] = useState(null)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   const dropdownRef = useRef(null)
   const navigate = useNavigate()
   const user = getStoredUser()
@@ -138,6 +149,7 @@ export default function DashboardPage() {
   useEffect(() => {
     getMySubscription().then((r) => setSubscription(r.data)).catch(() => {})
     getBuckets().then((r) => setBuckets(r.data)).catch(() => setBuckets([]))
+    getStorageUsage().then((r) => setUsage(r.data)).catch(() => setUsage(null))
   }, [])
 
   useEffect(() => {
@@ -159,18 +171,20 @@ export default function DashboardPage() {
     }
   }
 
-  const storageLimit = subscription?.plan?.storage_limit_bytes ?? 0
-  const storagePercent = 0 // akan diisi saat usage tracking ada
+  const storageLimit = usage?.storage_limit_bytes ?? subscription?.plan?.storage_limit_bytes ?? 0
+  const storageUsed = usage?.storage_used_bytes ?? 0
+  const storagePercent = usage?.storage_percent ?? 0
   const activeBuckets = buckets.length
-  const bucketLimit = subscription?.plan?.bucket_limit ?? 0
+  const bucketLimit = usage?.bucket_limit ?? subscription?.plan?.bucket_limit ?? 0
   const bucketPercent = bucketLimit ? Math.round((activeBuckets / bucketLimit) * 100) : 0
 
   return (
     <div className="dashboard">
+      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       {/* ── Navbar ── */}
       <nav className="navbar">
         <div className="navbar-left">
-          <button className="icon-btn" aria-label="Menu"><MenuIcon /></button>
+          <button className="icon-btn" aria-label="Menu" onClick={() => setSidebarOpen(true)}><MenuIcon /></button>
           <span className="navbar-brand">INI AWAN</span>
         </div>
         <div className="navbar-right">
@@ -235,7 +249,7 @@ export default function DashboardPage() {
             <div className="stat-footer">
               <div className="stat-footer-item">
                 <span className="stat-footer-label">Digunakan</span>
-                <span className="stat-footer-value">0 B</span>
+                <span className="stat-footer-value">{formatBytes(storageUsed)}</span>
               </div>
               <div className="stat-footer-divider" />
               <div className="stat-footer-item">
@@ -414,6 +428,14 @@ export default function DashboardPage() {
                   <ExternalLinkIcon />
                 </Link>
               )}
+              <Link to="/aktivitas" className="quick-link-item">
+                <span className="quick-link-icon"><ClockIcon /></span>
+                <div className="quick-link-text">
+                  <span className="quick-link-title">Log Aktivitas</span>
+                  <span className="quick-link-desc">Riwayat aktivitas akun Anda</span>
+                </div>
+                <ExternalLinkIcon />
+              </Link>
             </div>
           </div>
         </div>

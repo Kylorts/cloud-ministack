@@ -23,8 +23,10 @@ from app.models.plan import ServicePlan
 from app.models.subscription import Subscription, SubscriptionStatus
 from app.models.storage_bucket import StorageBucket, BucketStatus, BucketVisibility
 from app.models.storage_object import StorageObject, ObjectStatus
+from app.models.usage_counter import UsageCounter
 from app.core.security import hash_password
 from app.core.ministack import get_s3_client, _ensure_bucket_exists
+from app.core import usage as usage_helper
 
 MB = 1_048_576
 GB = 1_073_741_824
@@ -116,13 +118,25 @@ def reset_demo(db):
         user = db.query(User).filter(User.email == email).first()
         if not user:
             continue
-        # Hapus objects
-        for bucket in db.query(StorageBucket).filter(StorageBucket.user_id == user.id).all():
-            db.query(StorageObject).filter(StorageObject.bucket_id == bucket.id).delete()
-            db.delete(bucket)
-        # Hapus subscription
-        db.query(Subscription).filter(Subscription.user_id == user.id).delete()
+
+        bucket_ids = [
+            b.id for b in db.query(StorageBucket.id)
+            .filter(StorageBucket.user_id == user.id).all()
+        ]
+
+        # Urutan delete sesuai dependency (bulk + flush tiap langkah)
+        if bucket_ids:
+            db.query(StorageObject).filter(StorageObject.bucket_id.in_(bucket_ids)).delete(synchronize_session=False)
+        db.query(StorageObject).filter(StorageObject.user_id == user.id).delete(synchronize_session=False)
+        db.flush()
+        db.query(StorageBucket).filter(StorageBucket.user_id == user.id).delete(synchronize_session=False)
+        db.flush()
+        db.query(UsageCounter).filter(UsageCounter.user_id == user.id).delete(synchronize_session=False)
+        db.flush()
+        db.query(Subscription).filter(Subscription.user_id == user.id).delete(synchronize_session=False)
+        db.flush()
         db.delete(user)
+        db.flush()
         print(f"  hapus {email}")
     db.commit()
     print("[Reset] Selesai.\n")
@@ -144,6 +158,8 @@ def seed_bucket_limit(db):
     make_object(db, b2, user.id, "backup-2026-06-01.sql", 10 * MB,        "application/octet-stream")
     make_object(db, b2, user.id, "backup-2026-05-01.sql",  8 * MB,        "application/octet-stream")
 
+    db.flush()
+    usage_helper.recalculate(db, sub)
     print(f"  ✓  {user.email} | 2 bucket dibuat → tombol buat bucket hilang")
 
 
@@ -173,6 +189,8 @@ def seed_storage_full(db):
         make_object(db, b, user.id, fname, size, ctype)
         total += size
 
+    db.flush()
+    usage_helper.recalculate(db, sub)
     pct = round(total / GB * 100)
     print(f"  ✓  {user.email} | {total // MB} MB / 1024 MB ({pct}%) → tidak bisa upload apapun")
 
@@ -188,12 +206,12 @@ def seed_quota_almost_full(db):
 
     # Total ~880MB = 88% dari 1GB
     files = [
-        ("archive-project-2025.zip",   200 * MB, "application/zip"),
-        ("database-dump-full.sql",     180 * MB, "application/octet-stream"),
-        ("video-recording-01.mp4",     180 * MB, "video/mp4"),
-        ("backup-images.tar.gz",       150 * MB, "application/gzip"),
+        ("archive-project-2025.zip",   220 * MB, "application/zip"),
+        ("database-dump-full.sql",     200 * MB, "application/octet-stream"),
+        ("video-recording-01.mp4",     200 * MB, "video/mp4"),
+        ("backup-images.tar.gz",       180 * MB, "application/gzip"),
         ("report-annual-2025.pdf",     int(49.5 * MB), "application/pdf"),
-        ("dataset-training.csv",        40 * MB,        "text/csv"),
+        ("dataset-training.csv",        90 * MB,        "text/csv"),
         ("config-backup.json",          int(0.5 * MB),  "application/json"),
         ("readme.md",                   int(0.02 * MB), "text/plain"),
     ]
@@ -203,6 +221,8 @@ def seed_quota_almost_full(db):
         make_object(db, b, user.id, fname, size, ctype)
         total += size
 
+    db.flush()
+    usage_helper.recalculate(db, sub)
     pct = round(total / GB * 100)
     sisa = (GB - total) // MB
     print(f"  ✓  {user.email} | {total // MB} MB / 1024 MB ({pct}%) | sisa {sisa} MB")

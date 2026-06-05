@@ -59,13 +59,15 @@ function getFileTypeBadge(contentType, filename = '') {
     docx: 'DOCX', doc: 'DOC',
     pptx: 'PPTX', ppt: 'PPT',
     pdf: 'PDF', txt: 'TXT', md: 'MD',
-    png: 'PNG', jpg: 'JPG', jpeg: 'JPG', gif: 'GIF', webp: 'WEBP', svg: 'SVG',
-    mp4: 'MP4', mov: 'MOV', avi: 'AVI', mkv: 'MKV',
-    mp3: 'MP3', wav: 'WAV',
-    zip: 'ZIP', rar: 'RAR', gz: 'GZ', tar: 'TAR',
+    png: 'PNG', jpg: 'JPG', jpeg: 'JPG', gif: 'GIF', webp: 'WEBP', svg: 'SVG', ico: 'ICO', bmp: 'BMP',
+    mp4: 'MP4', mov: 'MOV', avi: 'AVI', mkv: 'MKV', webm: 'WEBM',
+    mp3: 'MP3', wav: 'WAV', flac: 'FLAC', ogg: 'OGG',
+    zip: 'ZIP', rar: 'RAR', gz: 'GZ', tar: 'TAR', '7z': '7Z',
     json: 'JSON', xml: 'XML', yaml: 'YAML', yml: 'YAML',
     html: 'HTML', css: 'CSS', js: 'JS', ts: 'TS',
-    sql: 'SQL', db: 'DB',
+    sql: 'SQL', db: 'DB', sqlite: 'DB',
+    exe: 'EXE', msi: 'MSI', dmg: 'DMG', apk: 'APK', deb: 'DEB',
+    iso: 'ISO', bin: 'BIN', dll: 'DLL',
   }
   if (extMap[ext]) return extMap[ext]
 
@@ -343,11 +345,6 @@ export default function BucketDetailPage() {
               <span className="bucket-visibility-badge">
                 {bucket.visibility === 'private' ? 'Pribadi' : 'Publik'}
               </span>
-            </div>
-            <div className="bucket-meta">
-              <span>Total Ukuran: {formatBytes(totalSize)}</span>
-              <span className="bucket-meta-sep">|</span>
-              <span>{objects.length} Objek</span>
             </div>
           </div>
           <div className="bucket-header-actions">

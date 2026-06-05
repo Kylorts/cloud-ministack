@@ -1,6 +1,7 @@
 import { useRef, useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { getStoredUser, logout } from '../services/auth'
+import Sidebar from './Sidebar'
 import './Navbar.css'
 
 function MenuIcon() {
@@ -42,6 +43,7 @@ function LogoutIcon() {
 
 export default function Navbar({ breadcrumbs = [] }) {
   const [dropdownOpen, setDropdownOpen] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   const dropdownRef = useRef(null)
   const navigate = useNavigate()
   const user = getStoredUser()
@@ -62,9 +64,11 @@ export default function Navbar({ breadcrumbs = [] }) {
   }
 
   return (
+    <>
+    <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
     <nav className="top-nav">
       <div className="top-nav-left">
-        <button className="top-nav-menu-btn" aria-label="Menu">
+        <button className="top-nav-menu-btn" aria-label="Menu" onClick={() => setSidebarOpen(true)}>
           <MenuIcon />
         </button>
         <span className="top-nav-brand">INI AWAN</span>
@@ -115,5 +119,6 @@ export default function Navbar({ breadcrumbs = [] }) {
         </div>
       </div>
     </nav>
+    </>
   )
 }

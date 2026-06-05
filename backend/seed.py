@@ -4,7 +4,7 @@ Run: python seed.py
 """
 from app.database import SessionLocal
 from app.models.user import User, UserRole, UserStatus
-from app.models.plan import ServicePlan, BillingPeriod
+from app.models.plan import ServicePlan, BillingPeriod, PlanCategory
 from app.models.subscription import Subscription       # noqa: F401 — wajib agar relasi SQLAlchemy resolve
 from app.models.storage_bucket import StorageBucket    # noqa: F401
 from app.models.storage_object import StorageObject    # noqa: F401
@@ -32,6 +32,7 @@ PLAN_SEEDS = [
     {
         "name": "Storage Lite",
         "description": "Paket penyimpanan dasar untuk kebutuhan personal.",
+        "category": PlanCategory.storage,
         "price": 5000.00,
         "billing_period": BillingPeriod.monthly,
         "storage_limit_bytes": 1 * 1_073_741_824,       # 1 GB
@@ -44,6 +45,7 @@ PLAN_SEEDS = [
     {
         "name": "Storage Basic",
         "description": "Paket penyimpanan untuk kebutuhan tim kecil.",
+        "category": PlanCategory.storage,
         "price": 10000.00,
         "billing_period": BillingPeriod.monthly,
         "storage_limit_bytes": 2 * 1_073_741_824,        # 2 GB
@@ -56,6 +58,7 @@ PLAN_SEEDS = [
     {
         "name": "Storage Plus",
         "description": "Paket penyimpanan untuk kebutuhan bisnis yang lebih besar.",
+        "category": PlanCategory.storage,
         "price": 20000.00,
         "billing_period": BillingPeriod.monthly,
         "storage_limit_bytes": 3 * 1_073_741_824,        # 3 GB
@@ -64,6 +67,46 @@ PLAN_SEEDS = [
         "bucket_limit": 3,
         "static_site_limit": 0,
         "access_key_limit": 3,
+    },
+    # ── Paket Hosting ──
+    {
+        "name": "Hosting Lite",
+        "description": "Hosting situs statis untuk 1 website.",
+        "category": PlanCategory.hosting,
+        "price": 5000.00,
+        "billing_period": BillingPeriod.monthly,
+        "storage_limit_bytes": 50 * 1_048_576,           # 50 MB total build
+        "max_file_size_bytes": 50 * 1_048_576,
+        "bandwidth_limit_bytes": 1 * 1_073_741_824,       # 1 GB
+        "bucket_limit": 0,
+        "static_site_limit": 1,
+        "access_key_limit": 0,
+    },
+    {
+        "name": "Hosting Basic",
+        "description": "Hosting situs statis untuk 2 website.",
+        "category": PlanCategory.hosting,
+        "price": 10000.00,
+        "billing_period": BillingPeriod.monthly,
+        "storage_limit_bytes": 100 * 1_048_576,          # 100 MB total build
+        "max_file_size_bytes": 100 * 1_048_576,
+        "bandwidth_limit_bytes": 3 * 1_073_741_824,       # 3 GB
+        "bucket_limit": 0,
+        "static_site_limit": 2,
+        "access_key_limit": 0,
+    },
+    {
+        "name": "Hosting Plus",
+        "description": "Hosting situs statis untuk 3 website.",
+        "category": PlanCategory.hosting,
+        "price": 20000.00,
+        "billing_period": BillingPeriod.monthly,
+        "storage_limit_bytes": 250 * 1_048_576,          # 250 MB total build
+        "max_file_size_bytes": 250 * 1_048_576,
+        "bandwidth_limit_bytes": 10 * 1_073_741_824,      # 10 GB
+        "bucket_limit": 0,
+        "static_site_limit": 3,
+        "access_key_limit": 0,
     },
 ]
 

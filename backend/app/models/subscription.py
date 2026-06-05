@@ -1,7 +1,7 @@
 import enum
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Integer, func
+from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -11,9 +11,21 @@ class SubscriptionStatus(str, enum.Enum):
     active = "active"
     pending_payment = "pending_payment"
     past_due = "past_due"
+    over_quota = "over_quota"
     suspended = "suspended"
     cancelled = "cancelled"
     expired = "expired"
+    terminated = "terminated"
+
+
+# Status yang dianggap "menempati slot" — user tidak boleh punya 2 sekaligus
+ACTIVE_LIKE_STATUSES = [
+    SubscriptionStatus.active,
+    SubscriptionStatus.pending_payment,
+    SubscriptionStatus.past_due,
+    SubscriptionStatus.over_quota,
+    SubscriptionStatus.suspended,
+]
 
 
 class Subscription(Base):
@@ -21,10 +33,13 @@ class Subscription(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("users.id"), nullable=False, unique=True
+        Integer, ForeignKey("users.id"), nullable=False, index=True
     )
     plan_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("service_plans.id"), nullable=False
+    )
+    category: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="storage", index=True
     )
     status: Mapped[SubscriptionStatus] = mapped_column(
         Enum(SubscriptionStatus), nullable=False, default=SubscriptionStatus.active

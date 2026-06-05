@@ -1,0 +1,73 @@
+.site-page { min-height: 100vh; background: #fff; display: flex; flex-direction: column; }
+.site-loading { display: flex; align-items: center; justify-content: center; min-height: 100vh; font-family: var(--font-ui); color: #6b7280; }
+.site-main { flex: 1; max-width: 920px; margin: 0 auto; padding: 32px 24px; width: 100%; }
+
+.site-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 24px; }
+.site-title-row { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+.site-name-title { font-family: var(--font-display); font-size: 26px; font-weight: 700; color: var(--color-dark); letter-spacing: -0.02em; }
+.site-status { font-size: 11px; font-weight: 500; font-family: var(--font-ui); padding: 3px 10px; border-radius: var(--radius-full); }
+.site-status--active { background: rgba(159,232,112,0.2); color: #166534; }
+.site-status--suspended { background: #f3f4f6; color: #6b7280; }
+.site-detail-url { font-size: 13px; color: #2563eb; font-family: var(--font-ui); }
+.site-detail-url:hover { text-decoration: underline; }
+
+.site-header-actions { display: flex; gap: 10px; }
+.btn-outline { display: inline-flex; align-items: center; border: 1px solid #d1d5db; color: var(--color-dark); padding: 9px 16px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 600; font-family: var(--font-ui); background: #fff; }
+.btn-outline:hover { background: #f9fafb; }
+.btn-primary-dark { background: var(--color-dark); color: #fff; padding: 9px 16px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 600; font-family: var(--font-ui); }
+.btn-primary-dark:hover { opacity: 0.88; }
+
+/* Active deployment card */
+.active-dep-card { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; border: 1px solid #bbf7d0; background: #f0fdf4; border-radius: var(--radius-md); padding: 20px; margin-bottom: 28px; }
+.active-dep-item { display: flex; flex-direction: column; gap: 4px; }
+.active-dep-label { font-size: 10px; font-weight: 600; font-family: var(--font-ui); color: #6b7280; letter-spacing: 0.05em; }
+.active-dep-value { font-size: 14px; font-weight: 600; font-family: var(--font-ui); color: var(--color-dark); }
+.mono { font-family: 'Courier New', monospace; }
+.active-dep-empty { border: 1px dashed #d1d5db; border-radius: var(--radius-md); padding: 24px; text-align: center; color: #9ca3af; font-family: var(--font-ui); font-size: 14px; margin-bottom: 28px; }
+
+.site-section-title { font-family: var(--font-display); font-size: 16px; font-weight: 600; color: var(--color-dark); margin-bottom: 14px; }
+
+/* Deployment table */
+.dep-table { width: 100%; border-collapse: collapse; border: 1px solid #d1d5db; border-radius: var(--radius-md); overflow: hidden; table-layout: fixed; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+.dep-table th:nth-child(1) { width: auto; }
+.dep-table th:nth-child(2) { width: 110px; text-align: center; }
+.dep-table th:nth-child(3) { width: 100px; text-align: center; }
+.dep-table th:nth-child(4) { width: 110px; text-align: center; }
+.dep-table th:nth-child(5) { width: 160px; text-align: center; }
+.dep-table th:nth-child(6) { width: 110px; text-align: center; }
+.dep-table td:nth-child(2), .dep-table td:nth-child(3), .dep-table td:nth-child(4), .dep-table td:nth-child(5), .dep-table td:nth-child(6) { text-align: center; }
+.dep-table thead tr { background: #f9fafb; }
+.dep-table th { padding: 10px 16px; text-align: left; font-size: 10px; font-weight: 600; font-family: var(--font-ui); color: #9ca3af; letter-spacing: 0.05em; text-transform: uppercase; border-bottom: 1px solid #e5e7eb; white-space: nowrap; }
+.dep-table td { padding: 13px 16px; border-bottom: 1px solid #f3f4f6; font-size: 13px; font-family: var(--font-ui); color: var(--color-dark); }
+.dep-table tbody tr:last-child td { border-bottom: none; }
+.dep-empty { text-align: center; padding: 32px !important; color: #9ca3af; }
+.dep-meta { color: #6b7280; }
+
+.dep-badge { font-size: 12px; font-family: var(--font-ui); font-weight: 500; padding: 2px 10px; border-radius: var(--radius-full); }
+.dep-badge--active { color: #16a34a; }
+.dep-badge--inactive { background: #f3f4f6; color: #6b7280; }
+
+.dep-rollback { font-size: 12px; font-weight: 600; font-family: var(--font-ui); color: #2563eb; }
+.dep-rollback:hover { text-decoration: underline; }
+.dep-rollback:disabled { opacity: 0.5; }
+
+.site-delete-btn { margin-top: 24px; font-size: 13px; color: #dc2626; font-family: var(--font-ui); font-weight: 500; }
+.site-delete-btn:hover { opacity: 0.8; }
+
+/* Deploy modal extras (reuse modal-* from HostingPage.css since global) */
+.deploy-desc { font-size: 13px; font-family: var(--font-ui); color: #6b7280; margin-bottom: 16px; }
+.deploy-desc code { background: #f3f4f6; padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+.deploy-drop { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; border: 2px dashed #d1d5db; border-radius: var(--radius-md); padding: 28px 20px; margin-bottom: 18px; cursor: pointer; text-align: center; background: #fafafa; transition: all 0.2s; }
+.deploy-drop:hover { border-color: #9ca3af; background: #f3f4f6; }
+.deploy-drop--active { border-color: var(--color-dark); background: #f0faf0; }
+.deploy-drop--has { border-color: #16a34a; background: #f0fdf4; }
+.deploy-drop-icon { font-size: 28px; }
+.deploy-drop-text { font-size: 14px; font-weight: 600; font-family: var(--font-ui); color: var(--color-dark); }
+.deploy-drop-name { font-size: 14px; font-weight: 600; font-family: var(--font-ui); color: #16a34a; word-break: break-all; max-width: 320px; }
+.deploy-drop-sub { font-size: 12px; font-family: var(--font-ui); color: #9ca3af; }
+.deploy-browse { color: var(--color-dark); text-decoration: underline; text-underline-offset: 2px; font-weight: 500; }
+
+.site-footer { padding: 20px 24px; border-top: 1px solid #e5e7eb; display: flex; align-items: center; justify-content: space-between; font-size: 13px; color: #9ca3af; font-family: var(--font-ui); margin-top: auto; }
+.site-footer-links { display: flex; gap: 20px; }
+.site-footer-links a { color: #9ca3af; }
+.site-footer-links a:hover { color: var(--color-dark); }

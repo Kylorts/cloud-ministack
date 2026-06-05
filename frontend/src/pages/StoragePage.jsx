@@ -272,7 +272,7 @@ export default function StoragePage() {
                     <td>
                       <div className="bucket-name-cell">
                         <BucketIcon />
-                        <span className="bucket-name">{bucket.display_name}</span>
+                        <span className="storage-bucket-name">{bucket.display_name}</span>
                       </div>
                     </td>
                     <td>

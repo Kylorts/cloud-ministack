@@ -9,9 +9,11 @@ router = APIRouter(prefix="/plans", tags=["plans"])
 
 
 @router.get("", response_model=list[PlanResponse])
-def list_plans(db: Session = Depends(get_db)):
-    plans = db.query(ServicePlan).filter(ServicePlan.is_active == True).all()
-    return plans
+def list_plans(category: str | None = None, db: Session = Depends(get_db)):
+    q = db.query(ServicePlan).filter(ServicePlan.is_active == True)
+    if category:
+        q = q.filter(ServicePlan.category == category)
+    return q.order_by(ServicePlan.price.asc()).all()
 
 
 @router.get("/{plan_id}", response_model=PlanResponse)

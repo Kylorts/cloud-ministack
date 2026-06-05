@@ -12,6 +12,10 @@ import app.models.plan            # noqa: F401
 import app.models.subscription    # noqa: F401
 import app.models.storage_bucket  # noqa: F401
 import app.models.storage_object  # noqa: F401
+import app.models.usage_counter   # noqa: F401
+import app.models.activity_log     # noqa: F401
+import app.models.static_site      # noqa: F401
+import app.models.static_site_deployment  # noqa: F401
 
 config = context.config
 

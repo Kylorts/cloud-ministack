@@ -11,12 +11,20 @@ class BillingPeriod(str, enum.Enum):
     monthly = "monthly"
 
 
+class PlanCategory(str, enum.Enum):
+    storage = "storage"
+    hosting = "hosting"
+
+
 class ServicePlan(Base):
     __tablename__ = "service_plans"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    category: Mapped[PlanCategory] = mapped_column(
+        Enum(PlanCategory), nullable=False, default=PlanCategory.storage
+    )
     price: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
     billing_period: Mapped[BillingPeriod] = mapped_column(
         Enum(BillingPeriod), nullable=False, default=BillingPeriod.monthly

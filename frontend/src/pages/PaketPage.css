@@ -41,6 +41,35 @@
   color: #6b7280;
 }
 
+.paket-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+  border-bottom: 1px solid #e5e7eb;
+}
+.paket-tab {
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: var(--font-ui);
+  color: #9ca3af;
+  background: transparent;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.paket-tab:hover { color: var(--color-dark); }
+.paket-tab--active {
+  color: var(--color-dark);
+  border-bottom-color: var(--color-dark);
+}
+
+.paket-loading-inline {
+  padding: 40px;
+  text-align: center;
+  font-family: var(--font-ui);
+  color: #9ca3af;
+}
+
 .paket-error {
   background: #fef2f2;
   color: #dc2626;
@@ -61,10 +90,11 @@
 
 .plan-card {
   position: relative;
-  border: 1px solid #e5e7eb;
+  border: 1px solid #d1d5db;
   border-radius: var(--radius-lg);
   padding: 28px 24px;
   background: #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -175,10 +205,10 @@
 
 .plan-btn--downgrade {
   background: transparent;
-  border: 1px solid #d1d5db;
-  color: var(--color-dark);
+  border: 1px solid #ef4444;
+  color: #dc2626;
 }
-.plan-btn--downgrade:hover { background: #f9fafb; }
+.plan-btn--downgrade:hover { background: #fef2f2; }
 
 .plan-btn--current {
   background: #f3f4f6;

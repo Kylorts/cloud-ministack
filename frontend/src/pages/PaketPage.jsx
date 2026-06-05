@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import { getPlans } from '../services/plans'
 import { getMySubscription, subscribe } from '../services/subscriptions'
@@ -28,6 +28,8 @@ function formatPrice(price) {
 }
 
 export default function PaketPage() {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [category, setCategory] = useState(searchParams.get('kategori') === 'hosting' ? 'hosting' : 'storage')
   const [plans, setPlans] = useState([])
   const [subscription, setSubscription] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -36,21 +38,28 @@ export default function PaketPage() {
   const navigate = useNavigate()
 
   useEffect(() => {
+    setLoading(true)
     Promise.all([
-      getPlans(),
-      getMySubscription().catch(() => ({ data: null })),
+      getPlans(category),
+      getMySubscription(category).catch(() => ({ data: null })),
     ]).then(([plansRes, subRes]) => {
       setPlans(plansRes.data)
       setSubscription(subRes.data)
     }).finally(() => setLoading(false))
-  }, [])
+  }, [category])
+
+  function switchCategory(cat) {
+    setCategory(cat)
+    setSearchParams({ kategori: cat })
+    setError('')
+  }
 
   async function handleSubscribe(planId) {
     setSubscribing(planId)
     setError('')
     try {
       await subscribe(planId)
-      navigate('/langganan')
+      navigate(category === 'hosting' ? '/hosting' : '/langganan')
     } catch (err) {
       setError(err.response?.data?.detail || 'Gagal berlangganan')
     } finally {
@@ -69,11 +78,25 @@ export default function PaketPage() {
   }
 
   function getPlanBadge(index) {
-    const badges = ['Mulai', 'Populer', 'Enterprise']
-    return badges[index] ?? ''
+    return (['Mulai', 'Populer', 'Enterprise'])[index] ?? ''
   }
 
-  if (loading) return <div className="paket-loading">Memuat paket...</div>
+  function planFeatures(plan) {
+    if (category === 'hosting') {
+      return [
+        `${plan.static_site_limit} ${plan.static_site_limit === 1 ? 'Situs' : 'Situs'}`,
+        `${formatBytes(plan.storage_limit_bytes)} Total Build`,
+        `Bandwidth ${formatBytes(plan.bandwidth_limit_bytes)}/bulan`,
+        `Deploy via ZIP`,
+      ]
+    }
+    return [
+      `${formatBytes(plan.storage_limit_bytes)} Storage`,
+      `${plan.bucket_limit} ${plan.bucket_limit === 1 ? 'Bucket' : 'Buckets'}`,
+      `Maks. ${formatBytes(plan.max_file_size_bytes)}/file`,
+      `Bandwidth ${formatBytes(plan.bandwidth_limit_bytes)}/bulan`,
+    ]
+  }
 
   return (
     <div className="paket-page">
@@ -88,46 +111,51 @@ export default function PaketPage() {
           <p className="paket-subtitle">Tingkatkan sumber daya cloud Anda sesuai kebutuhan proyek.</p>
         </div>
 
+        {/* Tab kategori */}
+        <div className="paket-tabs">
+          <button className={`paket-tab ${category === 'storage' ? 'paket-tab--active' : ''}`} onClick={() => switchCategory('storage')}>
+            Object Storage
+          </button>
+          <button className={`paket-tab ${category === 'hosting' ? 'paket-tab--active' : ''}`} onClick={() => switchCategory('hosting')}>
+            Static Hosting
+          </button>
+        </div>
+
         {error && <div className="paket-error">{error}</div>}
 
-        <div className="paket-grid">
-          {plans.map((plan, index) => {
-            const action = getPlanAction(plan)
-            const isCurrent = action.type === 'current'
-            const badge = getPlanBadge(index)
-
-            return (
-              <div
-                key={plan.id}
-                className={`plan-card ${isCurrent ? 'plan-card--active' : ''}`}
-              >
-                {isCurrent && <div className="plan-ribbon">AKTIF</div>}
-
-                <div className="plan-badge">{badge}</div>
-                <h2 className="plan-name">{plan.name}</h2>
-                <div className="plan-price">
-                  <span className="plan-price-value">{formatPrice(plan.price)}</span>
-                  <span className="plan-price-period"> /bulan</span>
+        {loading ? (
+          <div className="paket-loading-inline">Memuat paket...</div>
+        ) : (
+          <div className="paket-grid">
+            {plans.map((plan, index) => {
+              const action = getPlanAction(plan)
+              const isCurrent = action.type === 'current'
+              return (
+                <div key={plan.id} className={`plan-card ${isCurrent ? 'plan-card--active' : ''}`}>
+                  {isCurrent && <div className="plan-ribbon">AKTIF</div>}
+                  <div className="plan-badge">{getPlanBadge(index)}</div>
+                  <h2 className="plan-name">{plan.name}</h2>
+                  <div className="plan-price">
+                    <span className="plan-price-value">{formatPrice(plan.price)}</span>
+                    <span className="plan-price-period"> /bulan</span>
+                  </div>
+                  <ul className="plan-features">
+                    {planFeatures(plan).map((f, i) => (
+                      <li key={i}><CheckIcon /> {f}</li>
+                    ))}
+                  </ul>
+                  <button
+                    className={`plan-btn plan-btn--${action.type}`}
+                    disabled={isCurrent || subscribing === plan.id}
+                    onClick={() => !isCurrent && handleSubscribe(plan.id)}
+                  >
+                    {subscribing === plan.id ? 'Memproses...' : action.label}
+                  </button>
                 </div>
-
-                <ul className="plan-features">
-                  <li><CheckIcon /> {formatBytes(plan.storage_limit_bytes)} Storage</li>
-                  <li><CheckIcon /> {plan.bucket_limit} {plan.bucket_limit === 1 ? 'Bucket' : 'Buckets'}</li>
-                  <li><CheckIcon /> Maks. {formatBytes(plan.max_file_size_bytes)}/file</li>
-                  <li><CheckIcon /> Bandwidth {formatBytes(plan.bandwidth_limit_bytes)}/bulan</li>
-                </ul>
-
-                <button
-                  className={`plan-btn plan-btn--${action.type}`}
-                  disabled={isCurrent || subscribing === plan.id}
-                  onClick={() => !isCurrent && handleSubscribe(plan.id)}
-                >
-                  {subscribing === plan.id ? 'Memproses...' : action.label}
-                </button>
-              </div>
-            )
-          })}
-        </div>
+              )
+            })}
+          </div>
+        )}
       </main>
 
       <footer className="paket-footer">

@@ -10,11 +10,15 @@ from app.core.deps import get_current_user
 from app.core.ministack import (
     create_bucket, delete_bucket,
     upload_object, download_object, delete_object,
+    get_s3_client, _ensure_bucket_exists,
 )
+from app.core import usage as usage_helper
+from app.core.activity import log_activity
 from app.database import get_db
 from app.models.storage_bucket import BucketStatus, BucketVisibility, StorageBucket
 from app.models.storage_object import ObjectStatus, StorageObject
 from app.models.subscription import Subscription, SubscriptionStatus
+from app.models.usage_counter import UsageCounter
 from app.models.user import User
 from app.schemas.storage_bucket import BucketCreateRequest, BucketDetailResponse, BucketResponse
 from app.schemas.storage_object import ObjectResponse
@@ -28,13 +32,14 @@ def _get_active_subscription(user_id: int, db: Session) -> Subscription:
         .filter(
             Subscription.user_id == user_id,
             Subscription.status == SubscriptionStatus.active,
+            Subscription.category == "storage",
         )
         .first()
     )
     if not sub:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Anda belum memiliki langganan aktif. Pilih paket terlebih dahulu.",
+            detail="Anda belum memiliki langganan Storage aktif. Pilih paket Storage terlebih dahulu.",
         )
     return sub
 
@@ -58,23 +63,26 @@ def get_storage_usage(
     db: Session = Depends(get_db),
 ):
     sub = _get_active_subscription(current_user.id, db)
-    used_bytes = _get_storage_used_bytes(current_user.id, db)
-    bucket_count = (
-        db.query(StorageBucket)
-        .filter(
-            StorageBucket.user_id == current_user.id,
-            StorageBucket.status.in_([BucketStatus.creating, BucketStatus.active]),
-        )
-        .count()
-    )
+    counter = usage_helper.get_or_create_counter(db, sub)
+    db.commit()
+
+    used_bytes = counter.storage_used_bytes
     return {
         "storage_used_bytes": used_bytes,
         "storage_limit_bytes": sub.plan.storage_limit_bytes,
         "storage_percent": round((used_bytes / sub.plan.storage_limit_bytes) * 100, 1) if sub.plan.storage_limit_bytes else 0,
-        "bucket_count": bucket_count,
-        "bucket_limit": sub.plan.bucket_limit,
-        "max_file_size_bytes": sub.plan.max_file_size_bytes,
+        "bandwidth_used_bytes": counter.bandwidth_used_bytes,
         "bandwidth_limit_bytes": sub.plan.bandwidth_limit_bytes,
+        "bucket_count": counter.bucket_count,
+        "bucket_limit": sub.plan.bucket_limit,
+        "object_count": counter.object_count,
+        "access_key_count": counter.access_key_count,
+        "access_key_limit": sub.plan.access_key_limit,
+        "static_site_count": counter.static_site_count,
+        "static_site_limit": sub.plan.static_site_limit,
+        "max_file_size_bytes": sub.plan.max_file_size_bytes,
+        "period_start": counter.period_start,
+        "period_end": counter.period_end,
     }
 
 
@@ -162,6 +170,18 @@ def create_bucket_endpoint(
             detail=f"Gagal membuat bucket di MiniStack: {str(e)}",
         )
 
+    # Update usage counter
+    usage_helper.add_bucket(db, sub)
+
+    log_activity(
+        db,
+        actor_user_id=current_user.id,
+        action="BUCKET_CREATED",
+        description=f"Membuat bucket '{bucket.display_name}'",
+        target_type="BUCKET",
+        target_id=bucket.id,
+    )
+
     db.commit()
     db.refresh(bucket)
     return bucket
@@ -219,9 +239,8 @@ def list_objects(
     db: Session = Depends(get_db),
 ):
     from botocore.exceptions import ClientError as BotoClientError
-    from app.core.ministack import get_s3_client, _ensure_bucket_exists
 
-    _get_active_subscription(current_user.id, db)
+    sub = _get_active_subscription(current_user.id, db)
     bucket = _get_bucket_or_404(bucket_id, current_user.id, db)
 
     db_objects = (
@@ -251,6 +270,9 @@ def list_objects(
                 else:
                     db.delete(obj)
             if len(cleaned) < len(db_objects):
+                # Ada object yang hilang → recalc counter agar akurat
+                db.flush()
+                usage_helper.recalculate(db, sub)
                 db.commit()
             db_objects = cleaned
         except BotoClientError:
@@ -283,7 +305,8 @@ async def upload_file(
             detail=f"Ukuran file melebihi batas paket Anda ({max_mb} MB).",
         )
 
-    used_bytes = _get_storage_used_bytes(current_user.id, db)
+    counter = usage_helper.get_or_create_counter(db, sub)
+    used_bytes = counter.storage_used_bytes
     if used_bytes + file_size > sub.plan.storage_limit_bytes:
         sisa_mb = (sub.plan.storage_limit_bytes - used_bytes) // (1024 * 1024)
         raise HTTPException(
@@ -319,6 +342,19 @@ async def upload_file(
             detail=f"Gagal mengunggah file ke MiniStack: {str(e)}",
         )
 
+    # Update usage counter
+    usage_helper.add_object(db, sub, file_size)
+
+    log_activity(
+        db,
+        actor_user_id=current_user.id,
+        action="FILE_UPLOADED",
+        description=f"Mengunggah file '{obj.filename}' ke bucket '{bucket.display_name}'",
+        target_type="OBJECT",
+        target_id=obj.id,
+        metadata={"size_bytes": file_size, "bucket": bucket.display_name},
+    )
+
     db.commit()
     db.refresh(obj)
     return obj
@@ -331,7 +367,7 @@ def download_file(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _get_active_subscription(current_user.id, db)
+    sub = _get_active_subscription(current_user.id, db)
     bucket = _get_bucket_or_404(bucket_id, current_user.id, db)
 
     obj = db.query(StorageObject).filter(
@@ -345,7 +381,6 @@ def download_file(
     # Cek keberadaan file di MiniStack SEBELUM streaming dimulai
     # agar error bisa di-handle dengan benar (setelah StreamingResponse dimulai sudah 200)
     from botocore.exceptions import ClientError as BotoClientError
-    from app.core.ministack import get_s3_client, _ensure_bucket_exists
 
     s3 = get_s3_client()
     try:
@@ -354,7 +389,8 @@ def download_file(
     except BotoClientError as e:
         code = e.response["Error"]["Code"]
         if code in ("404", "NoSuchKey"):
-            # File tidak ada di MiniStack — hapus permanen dari database
+            # File tidak ada di MiniStack — hapus permanen dari database + update counter
+            usage_helper.remove_object(db, sub, obj.size_bytes)
             db.delete(obj)
             db.commit()
             raise HTTPException(
@@ -378,7 +414,7 @@ def delete_file(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _get_active_subscription(current_user.id, db)
+    sub = _get_active_subscription(current_user.id, db)
     bucket = _get_bucket_or_404(bucket_id, current_user.id, db)
 
     obj = db.query(StorageObject).filter(
@@ -389,6 +425,7 @@ def delete_file(
     if not obj:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File tidak ditemukan")
 
+    freed_bytes = obj.size_bytes
     obj.status = ObjectStatus.deleting
     db.flush()
 
@@ -404,6 +441,19 @@ def delete_file(
 
     obj.status = ObjectStatus.deleted
     obj.deleted_at = datetime.utcnow()
+
+    # Update usage counter
+    usage_helper.remove_object(db, sub, freed_bytes)
+
+    log_activity(
+        db,
+        actor_user_id=current_user.id,
+        action="FILE_DELETED",
+        description=f"Menghapus file '{obj.filename}' dari bucket '{bucket.display_name}'",
+        target_type="OBJECT",
+        target_id=obj.id,
+    )
+
     db.commit()
     return {"message": "File berhasil dihapus"}
 
@@ -416,7 +466,7 @@ def delete_bucket_endpoint(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _get_active_subscription(current_user.id, db)
+    sub = _get_active_subscription(current_user.id, db)
 
     bucket = db.query(StorageBucket).filter(
         StorageBucket.id == bucket_id,
@@ -427,10 +477,31 @@ def delete_bucket_endpoint(
     if not bucket:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bucket tidak ditemukan")
 
+    # Hitung object & storage yang akan dibebaskan
+    stats = (
+        db.query(
+            func.count(StorageObject.id),
+            func.coalesce(func.sum(StorageObject.size_bytes), 0),
+        )
+        .filter(
+            StorageObject.bucket_id == bucket.id,
+            StorageObject.status == ObjectStatus.available,
+        )
+        .first()
+    )
+    freed_objects = int(stats[0]) if stats else 0
+    freed_bytes = int(stats[1]) if stats else 0
+
     bucket.status = BucketStatus.deleting
     db.flush()
 
     try:
+        # Hapus semua object di MiniStack dulu, lalu bucket-nya
+        s3 = get_s3_client()
+        _ensure_bucket_exists(s3, bucket.internal_name)
+        resp = s3.list_objects_v2(Bucket=bucket.internal_name)
+        for o in resp.get("Contents", []):
+            s3.delete_object(Bucket=bucket.internal_name, Key=o["Key"])
         delete_bucket(bucket.internal_name)
     except Exception as e:
         bucket.status = BucketStatus.active
@@ -440,7 +511,26 @@ def delete_bucket_endpoint(
             detail=f"Gagal menghapus bucket dari MiniStack: {str(e)}",
         )
 
+    # Tandai object di bucket ini sebagai deleted
+    db.query(StorageObject).filter(
+        StorageObject.bucket_id == bucket.id,
+        StorageObject.status == ObjectStatus.available,
+    ).update({"status": ObjectStatus.deleted, "deleted_at": datetime.utcnow()})
+
     bucket.status = BucketStatus.deleted
     bucket.deleted_at = datetime.utcnow()
+
+    # Update usage counter
+    usage_helper.remove_bucket(db, sub, freed_bytes=freed_bytes, freed_objects=freed_objects)
+
+    log_activity(
+        db,
+        actor_user_id=current_user.id,
+        action="BUCKET_DELETED",
+        description=f"Menghapus bucket '{bucket.display_name}'",
+        target_type="BUCKET",
+        target_id=bucket.id,
+    )
+
     db.commit()
     return {"message": "Bucket berhasil dihapus"}
