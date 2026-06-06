@@ -27,6 +27,42 @@ router = APIRouter(prefix="/hosting", tags=["hosting"])
 
 BASE_URL = "http://localhost:8000"
 
+# ── Batas keamanan deploy ──
+MAX_FILE_COUNT = 1000                      # maksimal jumlah file dalam ZIP
+MAX_TOTAL_UNCOMPRESSED = 300 * 1024 * 1024  # batas keras 300 MB (cegah zip bomb)
+
+# Ekstensi berbahaya / eksekutabel yang ditolak
+BLOCKED_EXTENSIONS = {
+    ".exe", ".sh", ".bat", ".cmd", ".com", ".msi", ".scr", ".ps1",
+    ".dll", ".bin", ".app", ".deb", ".rpm", ".dmg", ".jar", ".vbs",
+    ".vbe", ".jse", ".wsf", ".wsh", ".msc", ".cpl", ".pif", ".gadget",
+    ".apk", ".so", ".dylib", ".bash", ".zsh", ".ksh",
+}
+
+
+def _is_unsafe_path(name: str) -> bool:
+    """Deteksi zip-slip / path traversal."""
+    if not name:
+        return True
+    # path absolut (unix / windows)
+    if name.startswith("/") or name.startswith("\\"):
+        return True
+    if len(name) >= 2 and name[1] == ":":  # C:\ dll
+        return True
+    # komponen ".." di mana pun
+    parts = name.replace("\\", "/").split("/")
+    if ".." in parts:
+        return True
+    return False
+
+
+def _blocked_ext(name: str) -> bool:
+    lower = name.lower()
+    for ext in BLOCKED_EXTENSIONS:
+        if lower.endswith(ext):
+            return True
+    return False
+
 
 # ── Helpers ────────────────────────────────────────────────────────
 
@@ -243,15 +279,42 @@ async def deploy_site(
     if clean_prefix:
         clean_prefix += "/"
 
-    # Extract & kumpulkan file
-    files: list[tuple[str, bytes]] = []  # (relative_path, data)
-    total_size = 0
     with zipfile.ZipFile(io.BytesIO(raw)) as zf:
-        for info in zf.infolist():
-            if info.is_dir():
-                continue
+        infos = [i for i in zf.infolist() if not i.is_dir()]
+
+        # ── Guard 1: jumlah file (cegah ZIP jutaan file) ──
+        if len(infos) > MAX_FILE_COUNT:
+            raise HTTPException(
+                status_code=422,
+                detail=f"ZIP berisi terlalu banyak file (maks {MAX_FILE_COUNT}).",
+            )
+
+        # ── Guard 2: zip bomb — cek total ukuran terdekompresi dari metadata ──
+        declared_total = sum(i.file_size for i in infos)
+        if declared_total > MAX_TOTAL_UNCOMPRESSED:
+            raise HTTPException(
+                status_code=422,
+                detail="Ukuran terdekompresi terlalu besar (kemungkinan ZIP bomb).",
+            )
+
+        # ── Guard 3 & 4: path traversal + ekstensi berbahaya, lalu extract ──
+        files: list[tuple[str, bytes]] = []
+        total_size = 0
+        for info in infos:
             name = info.filename
-            # buang folder root tunggal jika ZIP dibungkus 1 folder
+
+            if _is_unsafe_path(name):
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Nama file tidak aman terdeteksi: {name}",
+                )
+            if _blocked_ext(name):
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"File eksekutabel/berbahaya tidak diizinkan: {name}",
+                )
+
+            # buang folder pembungkus sesuai prefix
             if clean_prefix:
                 if not name.startswith(clean_prefix):
                     continue
@@ -260,9 +323,16 @@ async def deploy_site(
                 rel = name
             if not rel or rel.startswith("__MACOSX"):
                 continue
+
             data = zf.read(info)
-            files.append((rel, data))
             total_size += len(data)
+            # ── Guard zip bomb saat extract (jaga-jaga metadata bohong) ──
+            if total_size > MAX_TOTAL_UNCOMPRESSED:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Ukuran terdekompresi melebihi batas (kemungkinan ZIP bomb).",
+                )
+            files.append((rel, data))
 
     if not files:
         raise HTTPException(status_code=422, detail="ZIP kosong atau folder/prefix tidak ditemukan")
@@ -385,6 +455,58 @@ def rollback_deployment(
     dr = DeploymentResponse.model_validate(dep)
     dr.is_active = True
     return dr
+
+
+@router.delete("/sites/{site_id}/deployments/{deployment_id}", status_code=status.HTTP_200_OK)
+def delete_deployment(
+    site_id: int,
+    deployment_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    sub = _get_active_hosting_sub(current_user.id, db)
+    site = db.query(StaticSite).filter(
+        StaticSite.id == site_id,
+        StaticSite.user_id == current_user.id,
+        StaticSite.status == SiteStatus.active,
+    ).first()
+    if not site:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Situs tidak ditemukan")
+
+    dep = db.query(StaticSiteDeployment).filter(
+        StaticSiteDeployment.id == deployment_id,
+        StaticSiteDeployment.site_id == site.id,
+    ).first()
+    if not dep:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Deployment tidak ditemukan")
+
+    if site.active_deployment_id == dep.id:
+        raise HTTPException(
+            status_code=400,
+            detail="Deployment yang sedang aktif tidak bisa dihapus. Aktifkan versi lain terlebih dahulu.",
+        )
+
+    # Hapus file folder deployment ini dari MiniStack
+    try:
+        delete_hosting_prefix(f"{dep.deployment_path}/")
+    except Exception:
+        pass
+
+    ref = dep.deployment_ref
+    db.delete(dep)
+    db.flush()
+
+    usage_helper.recalculate_hosting(db, sub)
+    log_activity(
+        db,
+        actor_user_id=current_user.id,
+        action="STATIC_SITE_DEPLOYMENT_DELETED",
+        description=f"Menghapus deployment {ref} dari situs '{site.site_name}'",
+        target_type="SITE",
+        target_id=site.id,
+    )
+    db.commit()
+    return {"message": "Deployment berhasil dihapus"}
 
 
 @router.delete("/sites/{site_id}", status_code=status.HTTP_200_OK)

@@ -139,6 +139,21 @@
   font-size: 14px;
 }
 
+/* Pagination */
+.aktivitas-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 4px 0;
+  gap: 12px;
+}
+.aktivitas-pg-info { font-size: 12px; font-family: var(--font-ui); color: #6b7280; }
+.aktivitas-pg-controls { display: flex; align-items: center; gap: 10px; }
+.aktivitas-pg-page { font-size: 12px; font-family: var(--font-ui); color: #6b7280; }
+.aktivitas-pg-btn { padding: 6px 12px; border: 1px solid #e5e7eb; border-radius: var(--radius-sm); font-size: 12px; font-family: var(--font-ui); color: var(--color-dark); background: #fff; }
+.aktivitas-pg-btn:hover:not(:disabled) { background: #f9fafb; }
+.aktivitas-pg-btn:disabled { opacity: 0.4; cursor: default; }
+
 /* Footer */
 .aktivitas-footer {
   padding: 20px 24px;

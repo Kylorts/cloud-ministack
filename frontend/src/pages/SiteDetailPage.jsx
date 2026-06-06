@@ -1,8 +1,16 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import Navbar from '../components/Navbar'
-import { getSite, deploySite, rollbackDeployment, deleteSite } from '../services/hosting'
+import { getSite, deploySite, rollbackDeployment, deleteSite, deleteDeployment } from '../services/hosting'
 import './SiteDetailPage.css'
+
+function TrashIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+      <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
 
 function formatBytes(bytes) {
   if (!bytes) return '0 B'
@@ -15,7 +23,8 @@ function formatDate(dateStr) {
   if (!dateStr) return '-'
   const d = new Date(dateStr)
   const t = d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
-  return `${d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}, ${t}`
+  const date = d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+  return `${t} · ${date}`
 }
 
 /* ── Deploy Modal (upload ZIP) ── */
@@ -110,7 +119,12 @@ export default function SiteDetailPage() {
   const [site, setSite] = useState(null)
   const [loading, setLoading] = useState(true)
   const [showDeploy, setShowDeploy] = useState(false)
-  const [rollingBack, setRollingBack] = useState(null)
+  const [rollbackTarget, setRollbackTarget] = useState(null)
+  const [showDelete, setShowDelete] = useState(false)
+  const [deleteDepTarget, setDeleteDepTarget] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [page, setPage] = useState(1)
+  const PAGE_SIZE = 5
 
   function loadData() {
     return getSite(id)
@@ -123,26 +137,40 @@ export default function SiteDetailPage() {
 
   useEffect(() => { loadData().finally(() => setLoading(false)) }, [id])
 
-  async function handleRollback(depId) {
-    if (!window.confirm('Jadikan deployment ini sebagai versi aktif?')) return
-    setRollingBack(depId)
+  async function confirmRollback() {
+    setBusy(true)
     try {
-      await rollbackDeployment(id, depId)
+      await rollbackDeployment(id, rollbackTarget.id)
+      setRollbackTarget(null)
       await loadData()
     } catch (err) {
       alert(err.response?.data?.detail || 'Gagal rollback')
     } finally {
-      setRollingBack(null)
+      setBusy(false)
     }
   }
 
-  async function handleDelete() {
-    if (!window.confirm(`Hapus situs "${site.site_name}"? Tindakan ini tidak dapat dibatalkan.`)) return
+  async function confirmDelete() {
+    setBusy(true)
     try {
       await deleteSite(id)
       navigate('/hosting', { replace: true })
     } catch (err) {
       alert(err.response?.data?.detail || 'Gagal menghapus situs')
+      setBusy(false)
+    }
+  }
+
+  async function confirmDeleteDep() {
+    setBusy(true)
+    try {
+      await deleteDeployment(id, deleteDepTarget.id)
+      setDeleteDepTarget(null)
+      await loadData()
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Gagal menghapus deployment')
+    } finally {
+      setBusy(false)
     }
   }
 
@@ -150,6 +178,7 @@ export default function SiteDetailPage() {
   if (!site) return <div className="site-loading">Situs tidak ditemukan.</div>
 
   const activeDep = site.deployments?.find((d) => d.is_active)
+  const allDeps = site.deployments ?? []
 
   return (
     <div className="site-page">
@@ -171,6 +200,7 @@ export default function SiteDetailPage() {
             <a href={site.url} target="_blank" rel="noreferrer" className="site-detail-url">{site.url} ↗</a>
           </div>
           <div className="site-header-actions">
+            <button className="btn-danger-outline" onClick={() => setShowDelete(true)}>Hapus Situs</button>
             <a href={site.url} target="_blank" rel="noreferrer" className="btn-outline">Buka Situs</a>
             <button className="btn-primary-dark" onClick={() => setShowDeploy(true)}>Deploy Versi Baru</button>
           </div>
@@ -211,9 +241,9 @@ export default function SiteDetailPage() {
             </tr>
           </thead>
           <tbody>
-            {(!site.deployments || site.deployments.length === 0) ? (
+            {allDeps.length === 0 ? (
               <tr><td colSpan={6} className="dep-empty">Belum ada deployment.</td></tr>
-            ) : site.deployments.map((dep) => (
+            ) : allDeps.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((dep) => (
               <tr key={dep.id}>
                 <td className="mono">{dep.deployment_ref}</td>
                 <td>
@@ -225,10 +255,17 @@ export default function SiteDetailPage() {
                 <td>{formatBytes(dep.total_size_bytes)}</td>
                 <td className="dep-meta">{formatDate(dep.deployed_at)}</td>
                 <td>
-                  {!dep.is_active && dep.status === 'success' && (
-                    <button className="dep-rollback" disabled={rollingBack === dep.id} onClick={() => handleRollback(dep.id)}>
-                      {rollingBack === dep.id ? '...' : '↺ Rollback'}
-                    </button>
+                  {!dep.is_active && (
+                    <div className="dep-actions">
+                      {dep.status === 'success' && (
+                        <button className="dep-rollback" onClick={() => setRollbackTarget(dep)}>
+                          Jadikan Aktif
+                        </button>
+                      )}
+                      <button className="dep-delete" onClick={() => setDeleteDepTarget(dep)} title="Hapus deployment">
+                        <TrashIcon />
+                      </button>
+                    </div>
                   )}
                 </td>
               </tr>
@@ -236,7 +273,18 @@ export default function SiteDetailPage() {
           </tbody>
         </table>
 
-        <button className="site-delete-btn" onClick={handleDelete}>⊘ Hapus Situs</button>
+        {allDeps.length > PAGE_SIZE && (
+          <div className="dep-pagination">
+            <span className="dep-pg-info">
+              {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, allDeps.length)} dari {allDeps.length} deployment
+            </span>
+            <div className="dep-pg-controls">
+              <button className="dep-pg-btn" disabled={page === 1} onClick={() => setPage((p) => p - 1)}>‹ Sebelumnya</button>
+              <span className="dep-pg-page">Hal. {page} / {Math.ceil(allDeps.length / PAGE_SIZE)}</span>
+              <button className="dep-pg-btn" disabled={page >= Math.ceil(allDeps.length / PAGE_SIZE)} onClick={() => setPage((p) => p + 1)}>Berikutnya ›</button>
+            </div>
+          </div>
+        )}
       </main>
 
       <footer className="site-footer">
@@ -246,6 +294,75 @@ export default function SiteDetailPage() {
 
       {showDeploy && (
         <DeployModal siteId={id} onClose={() => setShowDeploy(false)} onSuccess={() => { setShowDeploy(false); loadData() }} />
+      )}
+
+      {rollbackTarget && (
+        <div className="modal-overlay" onClick={() => !busy && setRollbackTarget(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2 className="modal-title">Jadikan Versi Aktif</h2>
+              <button className="modal-close" onClick={() => setRollbackTarget(null)}>✕</button>
+            </div>
+            <div className="confirm-body">
+              <div className="confirm-icon confirm-icon--blue">✓</div>
+              <p className="confirm-text">Jadikan versi ini sebagai deployment aktif?</p>
+              <p className="confirm-sub mono">{rollbackTarget.deployment_ref}</p>
+              <p className="confirm-note">Situs akan langsung menyajikan versi ini.</p>
+            </div>
+            <div className="modal-actions">
+              <button className="modal-btn-cancel" onClick={() => setRollbackTarget(null)} disabled={busy}>Batal</button>
+              <button className="modal-btn-submit" onClick={confirmRollback} disabled={busy}>
+                {busy ? 'Memproses...' : 'Ya, Aktifkan'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDelete && (
+        <div className="modal-overlay" onClick={() => !busy && setShowDelete(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2 className="modal-title">Hapus Situs</h2>
+              <button className="modal-close" onClick={() => setShowDelete(false)}>✕</button>
+            </div>
+            <div className="confirm-body">
+              <div className="confirm-icon confirm-icon--red">🗑</div>
+              <p className="confirm-text">Yakin ingin menghapus situs ini?</p>
+              <p className="confirm-sub">"{site.site_name}"</p>
+              <p className="confirm-note confirm-note--danger">Semua deployment akan dihapus permanen dan tidak dapat dikembalikan.</p>
+            </div>
+            <div className="modal-actions">
+              <button className="modal-btn-cancel" onClick={() => setShowDelete(false)} disabled={busy}>Batal</button>
+              <button className="modal-btn-delete" onClick={confirmDelete} disabled={busy}>
+                {busy ? 'Menghapus...' : 'Ya, Hapus'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteDepTarget && (
+        <div className="modal-overlay" onClick={() => !busy && setDeleteDepTarget(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2 className="modal-title">Hapus Deployment</h2>
+              <button className="modal-close" onClick={() => setDeleteDepTarget(null)}>✕</button>
+            </div>
+            <div className="confirm-body">
+              <div className="confirm-icon confirm-icon--red">🗑</div>
+              <p className="confirm-text">Hapus versi deployment ini?</p>
+              <p className="confirm-sub mono">{deleteDepTarget.deployment_ref}</p>
+              <p className="confirm-note confirm-note--danger">File versi ini dihapus permanen dari server.</p>
+            </div>
+            <div className="modal-actions">
+              <button className="modal-btn-cancel" onClick={() => setDeleteDepTarget(null)} disabled={busy}>Batal</button>
+              <button className="modal-btn-delete" onClick={confirmDeleteDep} disabled={busy}>
+                {busy ? 'Menghapus...' : 'Ya, Hapus'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

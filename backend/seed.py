@@ -77,7 +77,7 @@ PLAN_SEEDS = [
         "billing_period": BillingPeriod.monthly,
         "storage_limit_bytes": 50 * 1_048_576,           # 50 MB total build
         "max_file_size_bytes": 50 * 1_048_576,
-        "bandwidth_limit_bytes": 1 * 1_073_741_824,       # 1 GB
+        "bandwidth_limit_bytes": 100 * 1_048_576,         # 100 MB (spec)
         "bucket_limit": 0,
         "static_site_limit": 1,
         "access_key_limit": 0,
@@ -90,7 +90,7 @@ PLAN_SEEDS = [
         "billing_period": BillingPeriod.monthly,
         "storage_limit_bytes": 100 * 1_048_576,          # 100 MB total build
         "max_file_size_bytes": 100 * 1_048_576,
-        "bandwidth_limit_bytes": 3 * 1_073_741_824,       # 3 GB
+        "bandwidth_limit_bytes": 300 * 1_048_576,         # 300 MB (spec)
         "bucket_limit": 0,
         "static_site_limit": 2,
         "access_key_limit": 0,
@@ -103,7 +103,7 @@ PLAN_SEEDS = [
         "billing_period": BillingPeriod.monthly,
         "storage_limit_bytes": 250 * 1_048_576,          # 250 MB total build
         "max_file_size_bytes": 250 * 1_048_576,
-        "bandwidth_limit_bytes": 10 * 1_073_741_824,      # 10 GB
+        "bandwidth_limit_bytes": 1 * 1_073_741_824,       # 1 GB (spec)
         "bucket_limit": 0,
         "static_site_limit": 3,
         "access_key_limit": 0,

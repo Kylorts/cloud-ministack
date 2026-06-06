@@ -214,19 +214,13 @@ export default function StoragePage() {
             </div>
           </div>
 
-          <div className="storage-stat-card storage-stat-card--center">
-            <span className="storage-stat-label">BUCKET AKTIF</span>
-            <div className="storage-stat-big">{buckets.length}</div>
-            <div className="storage-stat-sub">Unit penyimpanan tersedia yang aktif.</div>
-          </div>
-
           <div className="storage-stat-card">
-            <span className="storage-stat-label">PENGGUNAAN BANDWIDTH</span>
-            <div className="storage-stat-value">0 B <span className="storage-stat-total">/ {formatBytes(subscription?.plan?.bandwidth_limit_bytes ?? 0)}</span></div>
-            <div className="storage-bar"><div className="storage-bar-fill storage-bar-fill--bw" style={{ width: '0%' }} /></div>
+            <span className="storage-stat-label">BUCKET AKTIF</span>
+            <div className="storage-stat-value">{buckets.length} <span className="storage-stat-total">/ {bucketLimit} Bucket</span></div>
+            <div className="storage-bar"><div className="storage-bar-fill" style={{ width: `${bucketLimit ? Math.round((buckets.length / bucketLimit) * 100) : 0}%` }} /></div>
             <div className="storage-stat-meta">
-              <span>0% Kuota</span>
-              <span className="storage-stat-right">{formatBytes(subscription?.plan?.bandwidth_limit_bytes ?? 0)} SISA</span>
+              <span>Unit penyimpanan aktif</span>
+              <span className="storage-stat-right">{Math.max(0, bucketLimit - buckets.length)} tersisa</span>
             </div>
           </div>
         </div>

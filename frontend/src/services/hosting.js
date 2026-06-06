@@ -17,3 +17,6 @@ export const deploySite = (siteId, file, prefix = '') => {
 
 export const rollbackDeployment = (siteId, deploymentId) =>
   api.post(`/hosting/sites/${siteId}/deployments/${deploymentId}/rollback`)
+
+export const deleteDeployment = (siteId, deploymentId) =>
+  api.delete(`/hosting/sites/${siteId}/deployments/${deploymentId}`)

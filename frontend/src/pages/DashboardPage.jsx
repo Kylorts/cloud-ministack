@@ -4,6 +4,7 @@ import { logout, getStoredUser } from '../services/auth'
 import Sidebar from '../components/Sidebar'
 import { getMySubscription } from '../services/subscriptions'
 import { getBuckets, getStorageUsage } from '../services/storage'
+import { getHostingUsage } from '../services/hosting'
 import './DashboardPage.css'
 
 /* ── Icons ─────────────────────────────────────────────────── */
@@ -89,6 +90,14 @@ function ClockIcon() {
     </svg>
   )
 }
+function GlobeIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="9" stroke="#062F28" strokeWidth="1.5" />
+      <path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18" stroke="#062F28" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  )
+}
 
 function formatBytes(bytes) {
   if (!bytes) return '0 B'
@@ -141,6 +150,7 @@ export default function DashboardPage() {
   const [buckets, setBuckets] = useState([])
   const [showNoSubModal, setShowNoSubModal] = useState(false)
   const [usage, setUsage] = useState(null)
+  const [hostingUsage, setHostingUsage] = useState(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const dropdownRef = useRef(null)
   const navigate = useNavigate()
@@ -150,6 +160,7 @@ export default function DashboardPage() {
     getMySubscription().then((r) => setSubscription(r.data)).catch(() => {})
     getBuckets().then((r) => setBuckets(r.data)).catch(() => setBuckets([]))
     getStorageUsage().then((r) => setUsage(r.data)).catch(() => setUsage(null))
+    getHostingUsage().then((r) => setHostingUsage(r.data)).catch(() => setHostingUsage(null))
   }, [])
 
   useEffect(() => {
@@ -302,10 +313,14 @@ export default function DashboardPage() {
                 <span className="deco-circle deco-circle--1" />
                 <span className="deco-circle deco-circle--2" />
               </div>
-              <p className="network-label">Transfer Data Jaringan</p>
-              <p className="network-value">0 B / {formatBytes(subscription?.plan?.bandwidth_limit_bytes ?? 0)}</p>
-              <p className="network-sub">Kuota bandwidth keluar-masuk bulan ini</p>
-              <Link to="/kuota" className="network-link">Lihat Analisis Trafik →</Link>
+              <p className="network-label">Bandwidth Hosting</p>
+              <p className="network-value">
+                {formatBytes(hostingUsage?.bandwidth_used_bytes ?? 0)} / {formatBytes(hostingUsage?.bandwidth_limit_bytes ?? 0)}
+              </p>
+              <p className="network-sub">
+                {hostingUsage ? 'Trafik situs statis bulan ini' : 'Belum berlangganan hosting'}
+              </p>
+              <Link to="/hosting" className="network-link">Kelola Hosting →</Link>
             </div>
             <div className="stat-card stat-card--accent">
               <div className="security-content">
@@ -402,6 +417,14 @@ export default function DashboardPage() {
                 </div>
                 <ExternalLinkIcon />
               </a>
+              <Link to="/hosting" className="quick-link-item">
+                <span className="quick-link-icon"><GlobeIcon /></span>
+                <div className="quick-link-text">
+                  <span className="quick-link-title">Static Hosting</span>
+                  <span className="quick-link-desc">Deploy dan kelola website statis</span>
+                </div>
+                <ExternalLinkIcon />
+              </Link>
               <Link to="/paket" className="quick-link-item">
                 <span className="quick-link-icon"><PackageIcon /></span>
                 <div className="quick-link-text">

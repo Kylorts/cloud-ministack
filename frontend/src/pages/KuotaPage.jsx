@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import Navbar from '../components/Navbar'
 import { getMySubscription } from '../services/subscriptions'
 import { getBuckets, getStorageUsage } from '../services/storage'
+import { getHostingUsage } from '../services/hosting'
 import './KuotaPage.css'
 
 function formatBytes(bytes) {
@@ -84,15 +85,18 @@ function CircularMini({ value, color = '#9FE870', size = 56 }) {
 export default function KuotaPage() {
   const [subscription, setSubscription] = useState(null)
   const [usage, setUsage] = useState(null)
+  const [hostingUsage, setHostingUsage] = useState(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     Promise.all([
       getMySubscription().catch(() => ({ data: null })),
       getStorageUsage().catch(() => ({ data: null })),
-    ]).then(([subRes, usageRes]) => {
+      getHostingUsage().catch(() => ({ data: null })),
+    ]).then(([subRes, usageRes, hostRes]) => {
       setSubscription(subRes.data)
       setUsage(usageRes.data)
+      setHostingUsage(hostRes.data)
     }).finally(() => setLoading(false))
   }, [])
 
@@ -100,18 +104,23 @@ export default function KuotaPage() {
 
   const plan = subscription?.plan
   const storageLimit   = usage?.storage_limit_bytes   ?? plan?.storage_limit_bytes   ?? 0
-  const bandwidthLimit = plan?.bandwidth_limit_bytes ?? 0
   const bucketLimit    = usage?.bucket_limit          ?? plan?.bucket_limit           ?? 0
   const accessKeyLimit = plan?.access_key_limit ?? 0
 
   const storageUsed    = usage?.storage_used_bytes ?? 0
-  const bandwidthUsed  = 0
   const bucketCount    = usage?.bucket_count ?? 0
-  const keyCount       = 0
+  const keyCount       = usage?.access_key_count ?? 0
+
+  // Bandwidth = konsep hosting
+  const bandwidthUsed  = hostingUsage?.bandwidth_used_bytes ?? 0
+  const bandwidthLimit = hostingUsage?.bandwidth_limit_bytes ?? 0
+  const siteCount      = hostingUsage?.site_count ?? 0
+  const siteLimit      = hostingUsage?.site_limit ?? 0
 
   const storagePercent   = usage?.storage_percent ?? (storageLimit ? Math.round((storageUsed / storageLimit) * 100) : 0)
-  const bandwidthPercent = 0
+  const bandwidthPercent = bandwidthLimit ? Math.round((bandwidthUsed / bandwidthLimit) * 100) : 0
   const bucketPercent    = bucketLimit ? Math.round((bucketCount / bucketLimit) * 100) : 0
+  const sitePercent      = siteLimit ? Math.round((siteCount / siteLimit) * 100) : 0
   const keyPercent       = accessKeyLimit ? Math.round((keyCount / accessKeyLimit) * 100) : 0
 
   return (
@@ -161,14 +170,16 @@ export default function KuotaPage() {
             <div className="kuota-traffic-card">
               <div className="kuota-traffic-header">
                 <div className="kuota-traffic-icon"><BandwidthIcon /></div>
-                <span className="kuota-traffic-label">Bandwidth Bulanan</span>
+                <span className="kuota-traffic-label">Bandwidth Hosting</span>
                 <span className="kuota-traffic-percent kuota-traffic-percent--bw">{bandwidthPercent}%</span>
               </div>
               <div className="kuota-bar">
                 <div className="kuota-bar-fill" style={{ width: `${bandwidthPercent}%`, background: '#f59e0b' }} />
               </div>
               <p className="kuota-traffic-sub">
-                {formatBytes(bandwidthUsed)} dari {formatBytes(bandwidthLimit)} terpakai
+                {hostingUsage
+                  ? `${formatBytes(bandwidthUsed)} dari ${formatBytes(bandwidthLimit)} terpakai`
+                  : 'Belum berlangganan hosting'}
               </p>
             </div>
           </div>
@@ -185,6 +196,15 @@ export default function KuotaPage() {
               </div>
               <CircularMini value={bucketPercent} color="#9FE870" />
               <p className="kuota-resource-sub">{bucketCount} dari {bucketLimit} Bucket</p>
+            </div>
+
+            <div className="kuota-resource-card">
+              <div className="kuota-resource-top">
+                <SiteIcon />
+                <span className="kuota-resource-label">Situs Statis</span>
+              </div>
+              <CircularMini value={sitePercent} color="#3b82f6" />
+              <p className="kuota-resource-sub">{siteCount} dari {siteLimit} Situs</p>
             </div>
 
             <div className="kuota-resource-card">
