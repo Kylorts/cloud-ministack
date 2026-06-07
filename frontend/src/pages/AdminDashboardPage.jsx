@@ -150,7 +150,7 @@ export default function AdminDashboardPage() {
         <div className="adm-navbar-left">
           <button className="adm-icon-btn" aria-label="Menu"><MenuIcon /></button>
           <div className="adm-brand-group">
-            <span className="adm-brand">INI AWAN</span>
+            <span className="adm-brand">JADESTACK</span>
             <span className="adm-brand-sub">Infrastruktur Node</span>
           </div>
         </div>
@@ -325,8 +325,8 @@ export default function AdminDashboardPage() {
 
       {/* ── Footer ── */}
       <footer className="adm-footer">
-        <span className="adm-footer-brand">INI AWAN</span>
-        <span className="adm-footer-copy">© 2026 INI AWAN.</span>
+        <span className="adm-footer-brand">JADESTACK</span>
+        <span className="adm-footer-copy">© 2026 JADESTACK.</span>
         <div className="adm-footer-links">
           <a href="#">Dokumentasi</a>
           <a href="#">Privasi</a>

@@ -1,4 +1,5 @@
 import api from './api'
+import { pinHeader } from './security'
 
 // Usage
 export const getStorageUsage = () => api.get('/storage/usage')
@@ -7,7 +8,8 @@ export const getStorageUsage = () => api.get('/storage/usage')
 export const getBuckets = () => api.get('/storage/buckets')
 export const createBucket = (data) => api.post('/storage/buckets', data)
 export const getBucket = (id) => api.get(`/storage/buckets/${id}`)
-export const deleteBucket = (id) => api.delete(`/storage/buckets/${id}`)
+export const deleteBucket = (id, pin) => api.delete(`/storage/buckets/${id}`, pinHeader(pin))
+export const emptyBucket = (id) => api.post(`/storage/buckets/${id}/empty`)
 
 // Objects
 export const getObjects = (bucketId) => api.get(`/storage/buckets/${bucketId}/objects`)

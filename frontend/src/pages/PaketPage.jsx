@@ -67,8 +67,10 @@ export default function PaketPage() {
     }
   }
 
-  const currentPlanId = subscription?.status === 'active' ? subscription.plan_id : null
-  const currentPlanPrice = subscription?.plan?.price ?? null
+  const ACTIVE_LIKE = ['active', 'over_quota', 'suspended', 'past_due', 'pending_payment']
+  const hasActivePlan = subscription && ACTIVE_LIKE.includes(subscription.status)
+  const currentPlanId = hasActivePlan ? subscription.plan_id : null
+  const currentPlanPrice = hasActivePlan ? (subscription.plan?.price ?? null) : null
 
   function getPlanAction(plan) {
     if (!currentPlanId) return { label: 'Pilih Paket', type: 'subscribe' }
@@ -159,7 +161,7 @@ export default function PaketPage() {
       </main>
 
       <footer className="paket-footer">
-        <span>© 2026 INI AWAN</span>
+        <span>© 2026 JADESTACK</span>
         <div className="paket-footer-links">
           <a href="#">Dokumentasi</a>
           <a href="#">Privasi</a>

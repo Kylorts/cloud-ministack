@@ -98,7 +98,7 @@ export default function LoginPage() {
           <div className="app-icon">
             <CloudIcon />
           </div>
-          <h1 className="app-name">INI AWAN</h1>
+          <h1 className="app-name">JADESTACK</h1>
         </div>
 
         {/* Login Card */}

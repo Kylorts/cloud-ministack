@@ -1,12 +1,13 @@
 import re
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
+from fastapi import APIRouter, Depends, Header, HTTPException, UploadFile, File, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user
+from app.core.pin import require_pin
 from app.core.ministack import (
     create_bucket, delete_bucket,
     upload_object, download_object, delete_object,
@@ -88,6 +89,7 @@ def get_storage_usage(
 ):
     sub = _get_active_subscription(current_user.id, db)
     counter = usage_helper.get_or_create_counter(db, sub)
+    usage_helper.evaluate_quota_status(db, sub)  # lazy-check: pulihkan/aktifkan over_quota
     db.commit()
 
     used_bytes = counter.storage_used_bytes
@@ -198,6 +200,7 @@ def create_bucket_endpoint(
 
     # Update usage counter
     usage_helper.add_bucket(db, sub)
+    usage_helper.evaluate_quota_status(db, sub)
 
     log_activity(
         db,
@@ -299,6 +302,7 @@ def list_objects(
                 # Ada object yang hilang → recalc counter agar akurat
                 db.flush()
                 usage_helper.recalculate(db, sub)
+                usage_helper.evaluate_quota_status(db, sub)
                 db.commit()
             db_objects = cleaned
         except BotoClientError:
@@ -371,6 +375,7 @@ async def upload_file(
 
     # Update usage counter
     usage_helper.add_object(db, sub, file_size)
+    usage_helper.evaluate_quota_status(db, sub)
 
     log_activity(
         db,
@@ -471,6 +476,7 @@ def delete_file(
 
     # Update usage counter
     usage_helper.remove_object(db, sub, freed_bytes)
+    usage_helper.evaluate_quota_status(db, sub)  # mungkin sudah kembali di bawah limit
 
     log_activity(
         db,
@@ -485,6 +491,59 @@ def delete_file(
     return {"message": "File berhasil dihapus"}
 
 
+# ── Empty bucket (hapus semua file) ────────────────────────────────
+
+@router.post("/buckets/{bucket_id}/empty", status_code=status.HTTP_200_OK)
+def empty_bucket(
+    bucket_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    sub = _get_active_subscription(current_user.id, db)
+    bucket = _get_bucket_or_404(bucket_id, current_user.id, db)
+
+    objs = db.query(StorageObject).filter(
+        StorageObject.bucket_id == bucket.id,
+        StorageObject.status == ObjectStatus.available,
+    ).all()
+    if not objs:
+        return {"message": "Bucket sudah kosong", "deleted": 0}
+
+    # Hapus seluruh object di MiniStack
+    s3 = get_s3_client()
+    try:
+        _ensure_bucket_exists(s3, bucket.internal_name)
+        resp = s3.list_objects_v2(Bucket=bucket.internal_name)
+        for o in resp.get("Contents", []):
+            s3.delete_object(Bucket=bucket.internal_name, Key=o["Key"])
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Gagal mengosongkan bucket di MiniStack: {str(e)}",
+        )
+
+    now = datetime.utcnow()
+    for o in objs:
+        o.status = ObjectStatus.deleted
+        o.deleted_at = now
+    db.flush()
+
+    # Hitung ulang counter dari data + cek pemulihan kuota
+    usage_helper.recalculate(db, sub)
+    usage_helper.evaluate_quota_status(db, sub)
+
+    log_activity(
+        db,
+        actor_user_id=current_user.id,
+        action="FILE_DELETED",
+        description=f"Mengosongkan bucket '{bucket.display_name}' ({len(objs)} file dihapus)",
+        target_type="BUCKET",
+        target_id=bucket.id,
+    )
+    db.commit()
+    return {"message": f"{len(objs)} file berhasil dihapus", "deleted": len(objs)}
+
+
 # ── Delete bucket ──────────────────────────────────────────────────
 
 @router.delete("/buckets/{bucket_id}", status_code=status.HTTP_200_OK)
@@ -492,7 +551,9 @@ def delete_bucket_endpoint(
     bucket_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    x_transaction_pin: str | None = Header(default=None, alias="X-Transaction-PIN"),
 ):
+    require_pin(current_user, x_transaction_pin)
     sub = _get_active_subscription(current_user.id, db)
 
     bucket = db.query(StorageBucket).filter(
@@ -504,31 +565,27 @@ def delete_bucket_endpoint(
     if not bucket:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bucket tidak ditemukan")
 
-    # Hitung object & storage yang akan dibebaskan
-    stats = (
-        db.query(
-            func.count(StorageObject.id),
-            func.coalesce(func.sum(StorageObject.size_bytes), 0),
-        )
+    # Bucket hanya boleh dihapus jika KOSONG (seperti S3 asli).
+    object_count = (
+        db.query(func.count(StorageObject.id))
         .filter(
             StorageObject.bucket_id == bucket.id,
             StorageObject.status == ObjectStatus.available,
         )
-        .first()
+        .scalar()
     )
-    freed_objects = int(stats[0]) if stats else 0
-    freed_bytes = int(stats[1]) if stats else 0
+    if object_count and int(object_count) > 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Kosongkan bucket terlebih dahulu sebelum menghapus. "
+                   "Hapus semua file di dalamnya, lalu coba lagi.",
+        )
 
     bucket.status = BucketStatus.deleting
     db.flush()
 
     try:
-        # Hapus semua object di MiniStack dulu, lalu bucket-nya
-        s3 = get_s3_client()
-        _ensure_bucket_exists(s3, bucket.internal_name)
-        resp = s3.list_objects_v2(Bucket=bucket.internal_name)
-        for o in resp.get("Contents", []):
-            s3.delete_object(Bucket=bucket.internal_name, Key=o["Key"])
+        # Bucket sudah kosong → cukup hapus bucket-nya di MiniStack
         delete_bucket(bucket.internal_name)
     except Exception as e:
         bucket.status = BucketStatus.active
@@ -538,17 +595,12 @@ def delete_bucket_endpoint(
             detail=f"Gagal menghapus bucket dari MiniStack: {str(e)}",
         )
 
-    # Tandai object di bucket ini sebagai deleted
-    db.query(StorageObject).filter(
-        StorageObject.bucket_id == bucket.id,
-        StorageObject.status == ObjectStatus.available,
-    ).update({"status": ObjectStatus.deleted, "deleted_at": datetime.utcnow()})
-
     bucket.status = BucketStatus.deleted
     bucket.deleted_at = datetime.utcnow()
 
-    # Update usage counter
-    usage_helper.remove_bucket(db, sub, freed_bytes=freed_bytes, freed_objects=freed_objects)
+    # Update usage counter (tidak ada byte/object yang dibebaskan — sudah kosong)
+    usage_helper.remove_bucket(db, sub)
+    usage_helper.evaluate_quota_status(db, sub)  # mungkin sudah kembali di bawah limit
 
     log_activity(
         db,

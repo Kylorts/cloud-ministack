@@ -249,7 +249,7 @@ export default function AccessKeysPage() {
       </main>
 
       <footer className="ak-footer">
-        <span>© 2026 INI AWAN</span>
+        <span>© 2026 JADESTACK</span>
         <div className="ak-footer-links"><a href="#">Dokumentasi</a><a href="#">Privasi</a><a href="#">Syarat &amp; Ketentuan</a></div>
       </footer>
 

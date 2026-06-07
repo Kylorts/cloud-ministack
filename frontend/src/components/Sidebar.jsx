@@ -1,5 +1,7 @@
+import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { logout, getStoredUser } from '../services/auth'
+import { getSubscriptionHistory, everSubscribed } from '../services/subscriptions'
 import './Sidebar.css'
 
 function GridIcon() {
@@ -42,9 +44,9 @@ const NAV_ITEMS = [
   { path: '/hosting',   label: 'Static Hosting', icon: GlobeIcon },
   { path: '/paket',     label: 'Pilih Paket', icon: PackageIcon },
   { path: '/langganan', label: 'Detail Langganan', icon: CardIcon },
-  { path: '/access-keys', label: 'Access Keys', icon: KeyIcon },
+  { path: '/access-keys', label: 'Access Keys', icon: KeyIcon, requiresSub: true },
   { path: '/keamanan',  label: 'Keamanan & MFA', icon: ShieldIcon },
-  { path: '/kuota',     label: 'Penggunaan & Kuota', icon: ChartIcon },
+  { path: '/kuota',     label: 'Penggunaan & Kuota', icon: ChartIcon, requiresSub: true },
   { path: '/aktivitas', label: 'Log Aktivitas', icon: ClockIcon },
 ]
 
@@ -52,6 +54,19 @@ export default function Sidebar({ open, onClose }) {
   const location = useLocation()
   const navigate = useNavigate()
   const user = getStoredUser()
+  // "pernah berlangganan" (aktif ATAU dorman) → menu penuh.
+  // Hanya user yang BELUM PERNAH berlangganan yang menunya diciutkan.
+  const [hasSubscribed, setHasSubscribed] = useState(false)
+
+  useEffect(() => {
+    let active = true
+    getSubscriptionHistory()
+      .then((r) => { if (active) setHasSubscribed(everSubscribed(r.data)) })
+      .catch(() => { if (active) setHasSubscribed(false) })
+    return () => { active = false }
+  }, [])
+
+  const navItems = NAV_ITEMS.filter((item) => !item.requiresSub || hasSubscribed)
 
   function handleLogout() {
     logout()
@@ -63,12 +78,12 @@ export default function Sidebar({ open, onClose }) {
       <div className={`sidebar-overlay ${open ? 'sidebar-overlay--show' : ''}`} onClick={onClose} />
       <aside className={`sidebar ${open ? 'sidebar--open' : ''}`}>
         <div className="sidebar-header">
-          <span className="sidebar-brand">INI AWAN</span>
+          <span className="sidebar-brand">JADESTACK</span>
           <button className="sidebar-close" onClick={onClose} aria-label="Tutup"><CloseIcon /></button>
         </div>
 
         <nav className="sidebar-nav">
-          {NAV_ITEMS.map((item) => {
+          {navItems.map((item) => {
             const Icon = item.icon
             const active = location.pathname === item.path
             return (

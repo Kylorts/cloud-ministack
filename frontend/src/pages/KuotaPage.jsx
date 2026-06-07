@@ -220,7 +220,7 @@ export default function KuotaPage() {
       </main>
 
       <footer className="kuota-footer">
-        <span>© 2026 INI AWAN</span>
+        <span>© 2026 JADESTACK</span>
         <div className="kuota-footer-links">
           <a href="#">Dokumentasi</a>
           <a href="#">Privasi</a>

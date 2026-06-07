@@ -12,6 +12,7 @@ class SubscriptionResponse(BaseModel):
     id: int
     user_id: int
     plan_id: int
+    category: str
     status: str
     current_period_start: datetime
     current_period_end: datetime

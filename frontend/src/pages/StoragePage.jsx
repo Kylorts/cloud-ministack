@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Navbar from '../components/Navbar'
+import DormantNotice from '../components/DormantNotice'
 import { getBuckets, createBucket, deleteBucket, getStorageUsage } from '../services/storage'
-import { getMySubscription } from '../services/subscriptions'
+import { getMySubscription, getSubscriptionHistory, categoryState } from '../services/subscriptions'
 import './StoragePage.css'
 
 function PlusIcon() {
@@ -148,26 +149,31 @@ export default function StoragePage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [showModal, setShowModal] = useState(false)
+  const [storageState, setStorageState] = useState('active') // 'active' | 'dormant' | 'none'
   const navigate = useNavigate()
 
   function loadData() {
     return Promise.all([
-      getBuckets().catch((err) => {
-        if (err.response?.status === 403) navigate('/paket', { replace: true })
-        return { data: [] }
-      }),
+      getBuckets().catch(() => ({ data: [] })),
       getMySubscription().catch(() => ({ data: null })),
       getStorageUsage().catch(() => ({ data: null })),
-    ]).then(([bucketsRes, subRes, usageRes]) => {
-      setBuckets(bucketsRes.data)
+      getSubscriptionHistory().catch(() => ({ data: [] })),
+    ]).then(([bucketsRes, subRes, usageRes, histRes]) => {
+      setBuckets(bucketsRes.data || [])
       setSubscription(subRes.data)
       setUsage(usageRes.data)
+      setStorageState(categoryState(histRes.data, 'storage'))
     })
   }
 
   useEffect(() => {
     loadData().finally(() => setLoading(false))
   }, [])
+
+  // Belum pernah berlangganan storage → arahkan ke pilih paket.
+  useEffect(() => {
+    if (!loading && storageState === 'none') navigate('/paket', { replace: true })
+  }, [loading, storageState, navigate])
 
   const filtered = buckets.filter((b) =>
     b.display_name.toLowerCase().includes(search.toLowerCase())
@@ -183,6 +189,20 @@ export default function StoragePage() {
   const bucketLimitReached = bucketLimit > 0 && buckets.length >= bucketLimit
 
   if (loading) return <div className="storage-loading">Memuat data storage...</div>
+
+  if (storageState === 'dormant') {
+    return (
+      <div className="storage-page">
+        <Navbar breadcrumbs={[
+          { label: 'Sumber Daya Virtual', path: '/dashboard' },
+          { label: 'Object Storage' },
+        ]} />
+        <main className="storage-main">
+          <DormantNotice serviceName="Object Storage" paketPath="/paket" />
+        </main>
+      </div>
+    )
+  }
 
   return (
     <div className="storage-page">
@@ -318,7 +338,7 @@ export default function StoragePage() {
       </main>
 
       <footer className="storage-footer">
-        <span>© 2026 INI AWAN</span>
+        <span>© 2026 JADESTACK</span>
         <div className="storage-footer-links">
           <a href="#">Dokumentasi</a>
           <a href="#">Privasi</a>

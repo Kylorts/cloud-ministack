@@ -8,6 +8,7 @@ from app.core.deps import get_current_user
 from app.core.pin import require_pin
 from app.core import usage as usage_helper
 from app.database import get_db
+from app.models.access_key import AccessKey, KeyStatus
 from app.models.plan import ServicePlan
 from app.models.subscription import (
     ACTIVE_LIKE_STATUSES,
@@ -29,6 +30,28 @@ def _get_active_subscription(user_id: int, db: Session, category: str | None = N
     if category:
         q = q.filter(Subscription.category == category)
     return q.order_by(Subscription.created_at.desc()).first()
+
+
+def _revoke_category_keys(db: Session, user_id: int, category: str) -> int:
+    """
+    Cabut semua access key kategori tertentu milik user (Model A: key terikat
+    ke langganan — mati saat langganan berakhir/diganti). Mengembalikan jumlah
+    key yang dicabut.
+    """
+    keys = (
+        db.query(AccessKey)
+        .filter(
+            AccessKey.user_id == user_id,
+            AccessKey.category == category,
+            AccessKey.status != KeyStatus.revoked,
+        )
+        .all()
+    )
+    now = datetime.utcnow()
+    for k in keys:
+        k.status = KeyStatus.revoked
+        k.revoked_at = now
+    return len(keys)
 
 
 @router.get("/me", response_model=SubscriptionResponse)
@@ -89,6 +112,8 @@ def subscribe(
     if active:
         active.status = SubscriptionStatus.terminated
         active.cancelled_at = now
+        # Key terikat ke langganan → langganan lama diganti, cabut key-nya
+        _revoke_category_keys(db, current_user.id, category)
 
     # Buat record subscription BARU (riwayat tersimpan)
     sub = Subscription(
@@ -135,8 +160,10 @@ def cancel_subscription(
     x_transaction_pin: str | None = Header(default=None, alias="X-Transaction-PIN"),
 ):
     require_pin(current_user, x_transaction_pin)
+    # _get_active_subscription sudah memfilter status active-like (termasuk
+    # over_quota / suspended) — semua boleh dibatalkan, bukan hanya `active`.
     sub = _get_active_subscription(current_user.id, db, category=category)
-    if not sub or sub.status != SubscriptionStatus.active:
+    if not sub:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Tidak ada langganan aktif untuk dibatalkan",
@@ -145,11 +172,15 @@ def cancel_subscription(
     sub.status = SubscriptionStatus.cancelled
     sub.cancelled_at = datetime.utcnow()
 
+    # Key terikat ke langganan → cabut semua access key kategori ini
+    revoked = _revoke_category_keys(db, current_user.id, category)
+
     log_activity(
         db,
         actor_user_id=current_user.id,
         action="SUBSCRIPTION_CANCELLED",
-        description="Membatalkan langganan",
+        description="Membatalkan langganan"
+                    + (f" (mencabut {revoked} access key)" if revoked else ""),
         target_type="SUBSCRIPTION",
         target_id=sub.id,
     )

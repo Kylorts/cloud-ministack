@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import Navbar from '../components/Navbar'
-import { getBucket, getObjects, uploadFile, downloadFile, deleteFile, getStorageUsage } from '../services/storage'
+import PinPromptModal from '../components/PinPromptModal'
+import { getBucket, getObjects, uploadFile, downloadFile, deleteFile, deleteBucket, emptyBucket, getStorageUsage } from '../services/storage'
 import { getMySubscription } from '../services/subscriptions'
+import { getPinErrorCode } from '../services/security'
 import './BucketDetailPage.css'
 
 function UploadIcon() {
@@ -251,6 +253,12 @@ export default function BucketDetailPage() {
   const [showUpload, setShowUpload] = useState(false)
   const [deletingId, setDeletingId] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
+  const [showDeleteBucket, setShowDeleteBucket] = useState(false)
+  const [deletingBucket, setDeletingBucket] = useState(false)
+  const [pinOpen, setPinOpen] = useState(false)
+  const [pinErr, setPinErr] = useState('')
+  const [showEmptyBucket, setShowEmptyBucket] = useState(false)
+  const [emptying, setEmptying] = useState(false)
 
   function loadData() {
     return Promise.all([
@@ -299,6 +307,35 @@ export default function BucketDetailPage() {
     }
   }
 
+  async function confirmDeleteBucket(pin) {
+    setDeletingBucket(true)
+    try {
+      await deleteBucket(id, pin)
+      navigate('/storage', { replace: true })
+    } catch (err) {
+      const code = getPinErrorCode(err)
+      if (code === 'PIN_REQUIRED') { setShowDeleteBucket(false); setPinOpen(true); setPinErr(''); setDeletingBucket(false); return }
+      if (code === 'PIN_INVALID') { setPinErr('PIN Transaksi salah.'); setDeletingBucket(false); return }
+      const d = err.response?.data?.detail
+      alert(typeof d === 'string' ? d : 'Gagal menghapus bucket')
+      setDeletingBucket(false)
+    }
+  }
+
+  async function handleEmptyBucket() {
+    setEmptying(true)
+    try {
+      await emptyBucket(id)
+      setShowEmptyBucket(false)
+      await loadData()
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Gagal mengosongkan bucket')
+    } finally {
+      setEmptying(false)
+    }
+  }
+
+  const isEmpty = objects.length === 0
   const totalSize = objects.reduce((acc, o) => acc + (o.size_bytes ?? 0), 0)
 
   // ── Search & Pagination ──
@@ -344,8 +381,29 @@ export default function BucketDetailPage() {
             <button className="btn-outline" onClick={() => setShowUpload(true)}>
               <UploadIcon /> Unggah File
             </button>
+            <button
+              className="btn-danger-outline"
+              onClick={() => setShowEmptyBucket(true)}
+              disabled={isEmpty}
+              title={isEmpty ? 'Bucket sudah kosong' : 'Hapus semua file di bucket ini'}
+            >
+              <TrashIcon /> Hapus Semua File
+            </button>
+            <button
+              className="btn-danger-outline"
+              onClick={() => setShowDeleteBucket(true)}
+              disabled={!isEmpty}
+              title={isEmpty ? 'Hapus bucket ini' : 'Kosongkan bucket dulu (hapus semua file) sebelum menghapus'}
+            >
+              <TrashIcon /> Hapus Bucket
+            </button>
           </div>
         </div>
+        {!isEmpty && (
+          <p className="bucket-delete-hint">
+            Bucket hanya bisa dihapus jika kosong. Hapus semua file di dalamnya terlebih dahulu.
+          </p>
+        )}
 
         {/* Info cards */}
         <div className="bucket-info-cards">
@@ -496,7 +554,7 @@ export default function BucketDetailPage() {
       </main>
 
       <footer className="bucket-footer">
-        <span>© 2026 INI AWAN</span>
+        <span>© 2026 JADESTACK</span>
         <div className="bucket-footer-links">
           <a href="#">Dokumentasi</a>
           <a href="#">Privasi</a>
@@ -523,6 +581,62 @@ export default function BucketDetailPage() {
           onCancel={() => setDeleteTarget(null)}
         />
       )}
+
+      {showEmptyBucket && (
+        <div className="modal-overlay" onClick={() => !emptying && setShowEmptyBucket(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2 className="modal-title">Hapus Semua File</h2>
+              <button className="modal-close" onClick={() => setShowEmptyBucket(false)}>✕</button>
+            </div>
+            <div className="delete-confirm-body">
+              <div className="delete-confirm-icon"><TrashIcon /></div>
+              <p className="delete-confirm-text">Hapus semua file di bucket ini?</p>
+              <p className="delete-confirm-filename">{objects.length} file akan dihapus dari "{bucket.display_name}"</p>
+              <p className="delete-confirm-warn">File yang dihapus tidak dapat dikembalikan.</p>
+            </div>
+            <div className="modal-actions">
+              <button className="modal-btn-cancel" onClick={() => setShowEmptyBucket(false)} disabled={emptying}>Batal</button>
+              <button className="modal-btn-delete" onClick={handleEmptyBucket} disabled={emptying}>
+                {emptying ? 'Menghapus...' : 'Ya, Hapus Semua'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDeleteBucket && (
+        <div className="modal-overlay" onClick={() => !deletingBucket && setShowDeleteBucket(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2 className="modal-title">Hapus Bucket</h2>
+              <button className="modal-close" onClick={() => setShowDeleteBucket(false)}>✕</button>
+            </div>
+            <div className="delete-confirm-body">
+              <div className="delete-confirm-icon"><TrashIcon /></div>
+              <p className="delete-confirm-text">Yakin ingin menghapus bucket ini?</p>
+              <p className="delete-confirm-filename">"{bucket.display_name}"</p>
+              <p className="delete-confirm-warn">Bucket kosong ini akan dihapus permanen.</p>
+            </div>
+            <div className="modal-actions">
+              <button className="modal-btn-cancel" onClick={() => setShowDeleteBucket(false)} disabled={deletingBucket}>Batal</button>
+              <button className="modal-btn-delete" onClick={() => confirmDeleteBucket()} disabled={deletingBucket}>
+                {deletingBucket ? 'Menghapus...' : 'Ya, Hapus'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <PinPromptModal
+        open={pinOpen}
+        title="Hapus Bucket"
+        description="Masukkan PIN Transaksi untuk menghapus bucket ini."
+        error={pinErr}
+        busy={deletingBucket}
+        onSubmit={(pin) => confirmDeleteBucket(pin)}
+        onClose={() => { setPinOpen(false); setPinErr('') }}
+      />
     </div>
   )
 }

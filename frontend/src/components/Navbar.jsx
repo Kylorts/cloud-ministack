@@ -71,7 +71,7 @@ export default function Navbar({ breadcrumbs = [] }) {
         <button className="top-nav-menu-btn" aria-label="Menu" onClick={() => setSidebarOpen(true)}>
           <MenuIcon />
         </button>
-        <span className="top-nav-brand">INI AWAN</span>
+        <span className="top-nav-brand">JADESTACK</span>
         <div className="top-nav-breadcrumb">
           {breadcrumbs.map((crumb, i) => (
             <span key={i} className="breadcrumb-item">

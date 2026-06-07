@@ -296,7 +296,7 @@ export default function SiteDetailPage() {
       </main>
 
       <footer className="site-footer">
-        <span>© 2026 INI AWAN</span>
+        <span>© 2026 JADESTACK</span>
         <div className="site-footer-links"><a href="#">Dokumentasi</a><a href="#">Privasi</a><a href="#">Syarat &amp; Ketentuan</a></div>
       </footer>
 

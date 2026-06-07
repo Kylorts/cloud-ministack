@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { logout, getStoredUser } from '../services/auth'
 import Sidebar from '../components/Sidebar'
-import { getMySubscription } from '../services/subscriptions'
+import { getMySubscription, getSubscriptionHistory, categoryState, everSubscribed } from '../services/subscriptions'
 import { getBuckets, getStorageUsage } from '../services/storage'
 import { getHostingUsage, getSites } from '../services/hosting'
 import { getAccessKeys } from '../services/accessKeys'
@@ -130,7 +130,7 @@ function CircularProgress({ value, size = 140 }) {
 }
 
 /* ── Modal Belum Berlangganan ───────────────────────────────── */
-function NoSubModal({ onClose, onGoToPaket }) {
+function NoSubModal({ serviceName = 'layanan ini', onClose, onGoToPaket }) {
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-box" onClick={(e) => e.stopPropagation()}>
@@ -143,7 +143,7 @@ function NoSubModal({ onClose, onGoToPaket }) {
         </div>
         <h3 className="modal-heading">Belum Berlangganan</h3>
         <p className="modal-desc">
-          Anda perlu memilih paket layanan terlebih dahulu untuk menggunakan Object Storage.
+          Anda perlu memilih paket layanan terlebih dahulu untuk menggunakan {serviceName}.
         </p>
         <button className="modal-btn-primary modal-btn-full" onClick={onGoToPaket}>Pilih Paket</button>
       </div>
@@ -156,12 +156,13 @@ export default function DashboardPage() {
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const [subscription, setSubscription] = useState(null)
   const [buckets, setBuckets] = useState([])
-  const [showNoSubModal, setShowNoSubModal] = useState(false)
+  const [noSubModal, setNoSubModal] = useState(null) // { serviceName, paketPath } | null
   const [usage, setUsage] = useState(null)
   const [hostingUsage, setHostingUsage] = useState(null)
   const [sites, setSites] = useState([])
   const [storageKeys, setStorageKeys] = useState([])
   const [hostingKeys, setHostingKeys] = useState([])
+  const [subHistory, setSubHistory] = useState([])
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const dropdownRef = useRef(null)
   const navigate = useNavigate()
@@ -175,6 +176,7 @@ export default function DashboardPage() {
     getSites().then((r) => setSites(r.data)).catch(() => setSites([]))
     getAccessKeys('storage').then((r) => setStorageKeys(r.data)).catch(() => setStorageKeys([]))
     getAccessKeys('hosting').then((r) => setHostingKeys(r.data)).catch(() => setHostingKeys([]))
+    getSubscriptionHistory().then((r) => setSubHistory(r.data)).catch(() => setSubHistory([]))
   }, [])
 
   useEffect(() => {
@@ -187,12 +189,26 @@ export default function DashboardPage() {
 
   function handleLogout() { logout(); navigate('/login') }
 
+  // State per kategori: 'active' | 'dormant' | 'none'
+  const storageState = categoryState(subHistory, 'storage')
+  const hostingState = categoryState(subHistory, 'hosting')
+  const hasSubscribed = everSubscribed(subHistory)
+
   function handleStorageClick(e) {
     e.preventDefault()
-    if (!subscription) {
-      setShowNoSubModal(true)
+    if (storageState === 'none') {
+      setNoSubModal({ serviceName: 'Object Storage', paketPath: '/paket' })
     } else {
-      navigate('/storage')
+      navigate('/storage') // aktif atau dorman → halaman menampilkan keadaannya
+    }
+  }
+
+  function handleHostingClick(e) {
+    e.preventDefault()
+    if (hostingState === 'none') {
+      setNoSubModal({ serviceName: 'Static Hosting', paketPath: '/paket?kategori=hosting' })
+    } else {
+      navigate('/hosting')
     }
   }
 
@@ -210,7 +226,7 @@ export default function DashboardPage() {
       <nav className="navbar">
         <div className="navbar-left">
           <button className="icon-btn" aria-label="Menu" onClick={() => setSidebarOpen(true)}><MenuIcon /></button>
-          <span className="navbar-brand">INI AWAN</span>
+          <span className="navbar-brand">JADESTACK</span>
         </div>
         <div className="navbar-right">
           <div className="search-bar">
@@ -257,7 +273,9 @@ export default function DashboardPage() {
               <div>
                 <p className="stat-label">Kuota Penyimpanan</p>
                 <p className="stat-sublabel">
-                  {subscription ? subscription.plan.name : 'Belum berlangganan'}
+                  {subscription ? subscription.plan.name
+                    : storageState === 'dormant' ? 'Langganan dihentikan (dorman)'
+                    : 'Belum berlangganan'}
                 </p>
               </div>
               <span className="stat-icon"><CloudOutlineIcon /></span>
@@ -366,8 +384,17 @@ export default function DashboardPage() {
                 <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
                   <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" stroke="#d1d5db" strokeWidth="1.5"/>
                 </svg>
-                <p className="table-no-sub-text">Anda belum berlangganan.</p>
-                <button className="table-no-sub-btn" onClick={() => navigate('/paket')}>Pilih Paket →</button>
+                {storageState === 'dormant' ? (
+                  <>
+                    <p className="table-no-sub-text">Langganan dihentikan — layanan dorman.</p>
+                    <button className="table-no-sub-btn" onClick={() => navigate('/paket')}>Berlangganan Lagi →</button>
+                  </>
+                ) : (
+                  <>
+                    <p className="table-no-sub-text">Anda belum berlangganan.</p>
+                    <button className="table-no-sub-btn" onClick={() => navigate('/paket')}>Pilih Paket →</button>
+                  </>
+                )}
               </div>
             ) : (
               <table className="data-table">
@@ -429,8 +456,17 @@ export default function DashboardPage() {
             {!hostingUsage ? (
               <div className="table-no-sub">
                 <GlobeIcon />
-                <p className="table-no-sub-text">Belum berlangganan hosting.</p>
-                <button className="table-no-sub-btn" onClick={() => navigate('/paket?kategori=hosting')}>Pilih Paket →</button>
+                {hostingState === 'dormant' ? (
+                  <>
+                    <p className="table-no-sub-text">Langganan hosting dihentikan — dorman.</p>
+                    <button className="table-no-sub-btn" onClick={() => navigate('/paket?kategori=hosting')}>Berlangganan Lagi →</button>
+                  </>
+                ) : (
+                  <>
+                    <p className="table-no-sub-text">Belum berlangganan hosting.</p>
+                    <button className="table-no-sub-btn" onClick={() => navigate('/paket?kategori=hosting')}>Pilih Paket →</button>
+                  </>
+                )}
               </div>
             ) : (
               <table className="data-table">
@@ -469,30 +505,32 @@ export default function DashboardPage() {
             )}
           </div>
 
-          {/* Access Keys Summary */}
-          <div className="table-card">
-            <div className="table-card-header">
-              <h2 className="table-card-title">Access Keys</h2>
-              <Link to="/access-keys" className="table-link">Kelola <ExternalLinkIcon /></Link>
-            </div>
-            <div className="ak-summary">
-              <div className="ak-summary-item">
-                <span className="ak-summary-icon"><KeyIcon /></span>
-                <div className="ak-summary-text">
-                  <span className="ak-summary-label">Storage</span>
-                  <span className="ak-summary-count">{storageKeys.filter((k) => k.status === 'active').length} kunci aktif</span>
+          {/* Access Keys Summary — hanya tampil jika punya minimal 1 langganan */}
+          {hasSubscribed && (
+            <div className="table-card">
+              <div className="table-card-header">
+                <h2 className="table-card-title">Access Keys</h2>
+                <Link to="/access-keys" className="table-link">Kelola <ExternalLinkIcon /></Link>
+              </div>
+              <div className="ak-summary">
+                <div className="ak-summary-item">
+                  <span className="ak-summary-icon"><KeyIcon /></span>
+                  <div className="ak-summary-text">
+                    <span className="ak-summary-label">Storage</span>
+                    <span className="ak-summary-count">{storageKeys.filter((k) => k.status === 'active').length} kunci aktif</span>
+                  </div>
+                </div>
+                <div className="ak-summary-divider" />
+                <div className="ak-summary-item">
+                  <span className="ak-summary-icon"><KeyIcon /></span>
+                  <div className="ak-summary-text">
+                    <span className="ak-summary-label">Hosting</span>
+                    <span className="ak-summary-count">{hostingKeys.filter((k) => k.status === 'active').length} kunci aktif</span>
+                  </div>
                 </div>
               </div>
-              <div className="ak-summary-divider" />
-              <div className="ak-summary-item">
-                <span className="ak-summary-icon"><KeyIcon /></span>
-                <div className="ak-summary-text">
-                  <span className="ak-summary-label">Hosting</span>
-                  <span className="ak-summary-count">{hostingKeys.filter((k) => k.status === 'active').length} kunci aktif</span>
-                </div>
-              </div>
             </div>
-          </div>
+          )}
          </div>
 
           {/* Quick Links */}
@@ -509,14 +547,14 @@ export default function DashboardPage() {
                 </div>
                 <ExternalLinkIcon />
               </a>
-              <Link to="/hosting" className="quick-link-item">
+              <a href="/hosting" className="quick-link-item" onClick={handleHostingClick}>
                 <span className="quick-link-icon"><GlobeIcon /></span>
                 <div className="quick-link-text">
                   <span className="quick-link-title">Static Hosting</span>
                   <span className="quick-link-desc">Deploy dan kelola website statis</span>
                 </div>
                 <ExternalLinkIcon />
-              </Link>
+              </a>
               <Link to="/paket" className="quick-link-item">
                 <span className="quick-link-icon"><PackageIcon /></span>
                 <div className="quick-link-text">
@@ -533,14 +571,16 @@ export default function DashboardPage() {
                 </div>
                 <ExternalLinkIcon />
               </Link>
-              <Link to="/access-keys" className="quick-link-item">
-                <span className="quick-link-icon"><KeyIcon /></span>
-                <div className="quick-link-text">
-                  <span className="quick-link-title">Access Keys</span>
-                  <span className="quick-link-desc">Kredensial akses programatik</span>
-                </div>
-                <ExternalLinkIcon />
-              </Link>
+              {hasSubscribed && (
+                <Link to="/access-keys" className="quick-link-item">
+                  <span className="quick-link-icon"><KeyIcon /></span>
+                  <div className="quick-link-text">
+                    <span className="quick-link-title">Access Keys</span>
+                    <span className="quick-link-desc">Kredensial akses programatik</span>
+                  </div>
+                  <ExternalLinkIcon />
+                </Link>
+              )}
               {subscription && (
                 <Link to="/kuota" className="quick-link-item">
                   <span className="quick-link-icon"><ShieldIcon /></span>
@@ -565,8 +605,8 @@ export default function DashboardPage() {
       </main>
 
       <footer className="footer">
-        <span className="footer-brand">INI AWAN</span>
-        <span className="footer-copy">© 2026 INI AWAN.</span>
+        <span className="footer-brand">JADESTACK</span>
+        <span className="footer-copy">© 2026 JADESTACK.</span>
         <div className="footer-links">
           <a href="#">Dokumentasi</a>
           <a href="#">Privasi</a>
@@ -574,10 +614,11 @@ export default function DashboardPage() {
         </div>
       </footer>
 
-      {showNoSubModal && (
+      {noSubModal && (
         <NoSubModal
-          onClose={() => setShowNoSubModal(false)}
-          onGoToPaket={() => navigate('/paket')}
+          serviceName={noSubModal.serviceName}
+          onClose={() => setNoSubModal(null)}
+          onGoToPaket={() => navigate(noSubModal.paketPath)}
         />
       )}
     </div>

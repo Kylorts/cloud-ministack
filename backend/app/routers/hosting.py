@@ -181,6 +181,7 @@ def _sync_site_deployments(db: Session, site: StaticSite) -> None:
         sub = db.get(Subscription, site.subscription_id)
         if sub:
             usage_helper.recalculate_hosting(db, sub)
+            usage_helper.evaluate_quota_status(db, sub)
         db.commit()
 
 
@@ -208,6 +209,7 @@ def hosting_usage(
 ):
     sub = _get_active_hosting_sub(current_user.id, db)
     counter = usage_helper.get_or_create_counter(db, sub)
+    usage_helper.evaluate_quota_status(db, sub)  # lazy-check: pulihkan/aktifkan over_quota
     db.commit()
     build_limit = sub.plan.storage_limit_bytes
     return {
@@ -275,6 +277,7 @@ def create_site(
     db.flush()
 
     usage_helper.recalculate_hosting(db, sub)
+    usage_helper.evaluate_quota_status(db, sub)
     log_activity(
         db,
         actor_user_id=current_user.id,
@@ -465,6 +468,7 @@ async def deploy_site(
     site.active_deployment_id = dep.id
 
     usage_helper.recalculate_hosting(db, sub)
+    usage_helper.evaluate_quota_status(db, sub)
     log_activity(
         db,
         actor_user_id=current_user.id,
@@ -512,6 +516,7 @@ def rollback_deployment(
     site.active_deployment_id = dep.id
 
     usage_helper.recalculate_hosting(db, sub)
+    usage_helper.evaluate_quota_status(db, sub)
     log_activity(
         db,
         actor_user_id=current_user.id,
@@ -567,6 +572,7 @@ def delete_deployment(
     db.flush()
 
     usage_helper.recalculate_hosting(db, sub)
+    usage_helper.evaluate_quota_status(db, sub)
     log_activity(
         db,
         actor_user_id=current_user.id,
@@ -607,6 +613,7 @@ def delete_site(
     site.active_deployment_id = None
 
     usage_helper.recalculate_hosting(db, sub)
+    usage_helper.evaluate_quota_status(db, sub)
     log_activity(
         db,
         actor_user_id=current_user.id,

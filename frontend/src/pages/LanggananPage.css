@@ -279,3 +279,42 @@
 .langganan-footer-links { display: flex; gap: 20px; }
 .langganan-footer-links a { color: #9ca3af; }
 .langganan-footer-links a:hover { color: var(--color-dark); }
+
+/* ── Layout multi-langganan ── */
+.langganan-stack { display: flex; flex-direction: column; gap: 32px; }
+.lan-service-section { display: flex; flex-direction: column; gap: 12px; }
+.lan-service-heading {
+  font-family: var(--font-display); font-size: 16px; font-weight: 700;
+  color: var(--color-dark); letter-spacing: -0.01em;
+}
+
+/* ── Modal (konfirmasi batalkan langganan) ── */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(6,47,40,0.45);
+  display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 20px;
+}
+.modal {
+  background: #fff; border-radius: var(--radius-lg); padding: 28px;
+  width: 100%; max-width: 460px; box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+}
+.modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+.modal-title { font-family: var(--font-display); font-size: 18px; font-weight: 700; color: var(--color-dark); }
+.modal-close { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: var(--radius-sm); color: #6b7280; font-size: 14px; background: none; border: none; cursor: pointer; }
+.modal-close:hover { background: #f3f4f6; }
+.modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 22px; }
+.modal-btn-cancel {
+  padding: 9px 20px; border: 1px solid #d1d5db; border-radius: var(--radius-sm);
+  font-size: 13px; font-weight: 600; font-family: var(--font-ui); color: var(--color-dark);
+  background: transparent; cursor: pointer;
+}
+.modal-btn-cancel:hover:not(:disabled) { background: #f9fafb; }
+.modal-btn-delete {
+  padding: 9px 20px; background: #dc2626; color: #fff; border: none;
+  border-radius: var(--radius-sm); font-size: 13px; font-weight: 600; font-family: var(--font-ui); cursor: pointer;
+}
+.modal-btn-delete:hover:not(:disabled) { background: #b91c1c; }
+.modal-btn-delete:disabled, .modal-btn-cancel:disabled { opacity: 0.5; cursor: default; }
+
+.lan-cancel-text { font-size: 14px; font-family: var(--font-ui); color: var(--color-dark); margin-bottom: 12px; }
+.lan-cancel-list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 7px; }
+.lan-cancel-list li { font-size: 13px; font-family: var(--font-ui); color: #4b5563; line-height: 1.5; }

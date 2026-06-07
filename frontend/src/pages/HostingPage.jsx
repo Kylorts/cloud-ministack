@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Navbar from '../components/Navbar'
+import DormantNotice from '../components/DormantNotice'
 import { getSites, createSite, getHostingUsage } from '../services/hosting'
+import { getSubscriptionHistory, categoryState } from '../services/subscriptions'
 import './HostingPage.css'
 
 function PlusIcon() {
@@ -87,18 +89,18 @@ export default function HostingPage() {
   const [usage, setUsage] = useState(null)
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
+  const [hostingState, setHostingState] = useState('active') // 'active' | 'dormant' | 'none'
   const navigate = useNavigate()
 
   function loadData() {
     return Promise.all([
-      getSites().catch((err) => {
-        if (err.response?.status === 403) navigate('/paket?kategori=hosting', { replace: true })
-        return { data: [] }
-      }),
+      getSites().catch(() => ({ data: [] })),
       getHostingUsage().catch(() => ({ data: null })),
-    ]).then(([sitesRes, usageRes]) => {
-      setSites(sitesRes.data)
+      getSubscriptionHistory().catch(() => ({ data: [] })),
+    ]).then(([sitesRes, usageRes, histRes]) => {
+      setSites(sitesRes.data || [])
       setUsage(usageRes.data)
+      setHostingState(categoryState(histRes.data, 'hosting'))
     })
   }
 
@@ -106,7 +108,26 @@ export default function HostingPage() {
     loadData().finally(() => setLoading(false))
   }, [])
 
+  // Belum pernah berlangganan hosting → arahkan ke pilih paket.
+  useEffect(() => {
+    if (!loading && hostingState === 'none') navigate('/paket?kategori=hosting', { replace: true })
+  }, [loading, hostingState, navigate])
+
   if (loading) return <div className="hosting-loading">Memuat data hosting...</div>
+
+  if (hostingState === 'dormant') {
+    return (
+      <div className="hosting-page">
+        <Navbar breadcrumbs={[
+          { label: 'Sumber Daya Virtual', path: '/dashboard' },
+          { label: 'Static Hosting' },
+        ]} />
+        <main className="hosting-main">
+          <DormantNotice serviceName="Static Hosting" paketPath="/paket?kategori=hosting" />
+        </main>
+      </div>
+    )
+  }
 
   const siteCount = usage?.site_count ?? sites.length
   const siteLimit = usage?.site_limit ?? 0
@@ -200,7 +221,7 @@ export default function HostingPage() {
       </main>
 
       <footer className="hosting-footer">
-        <span>© 2026 INI AWAN</span>
+        <span>© 2026 JADESTACK</span>
         <div className="hosting-footer-links">
           <a href="#">Dokumentasi</a><a href="#">Privasi</a><a href="#">Syarat &amp; Ketentuan</a>
         </div>

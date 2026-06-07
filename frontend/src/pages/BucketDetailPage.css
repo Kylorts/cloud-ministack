@@ -88,6 +88,31 @@
 }
 .btn-outline:hover { background: #f9fafb; }
 
+.btn-danger-outline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #fecaca;
+  color: #dc2626;
+  padding: 8px 16px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--font-ui);
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+}
+.btn-danger-outline:hover:not(:disabled) { background: #fef2f2; }
+.btn-danger-outline:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.bucket-delete-hint {
+  margin: -16px 0 20px;
+  font-size: 12px;
+  color: #9ca3af;
+  font-family: var(--font-ui);
+}
+
 /* Info cards */
 .bucket-info-cards {
   display: grid;
