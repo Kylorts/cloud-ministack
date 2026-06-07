@@ -378,7 +378,12 @@ export default function BucketDetailPage() {
             </div>
           </div>
           <div className="bucket-header-actions">
-            <button className="btn-outline" onClick={() => setShowUpload(true)}>
+            <button
+              className="btn-outline"
+              onClick={() => setShowUpload(true)}
+              disabled={bucket.dormant}
+              title={bucket.dormant ? 'Bucket dorman — tidak bisa upload' : 'Unggah file'}
+            >
               <UploadIcon /> Unggah File
             </button>
             <button
@@ -403,6 +408,13 @@ export default function BucketDetailPage() {
           <p className="bucket-delete-hint">
             Bucket hanya bisa dihapus jika kosong. Hapus semua file di dalamnya terlebih dahulu.
           </p>
+        )}
+        {bucket.dormant && (
+          <div className="bucket-dormant-banner">
+            ⚠ Bucket ini <strong>dorman</strong> karena melebihi batas jumlah bucket paket Anda.
+            Anda masih bisa melihat, mengunduh, dan menghapus file, tetapi <strong>tidak bisa upload</strong>.
+            Upgrade paket atau hapus bucket lain untuk mengaktifkannya kembali.
+          </div>
         )}
 
         {/* Info cards */}

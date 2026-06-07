@@ -234,6 +234,13 @@ export default function StoragePage() {
             Langganan Anda disuspend. Layanan dibatasi sementara.
           </div>
         )}
+        {buckets.some((b) => b.dormant) && (
+          <div className="storage-warning-banner">
+            ℹ Beberapa bucket <strong>dorman</strong> karena melebihi batas jumlah bucket paket Anda
+            (bucket terbaru). Bucket dorman bisa dilihat/diunduh/dihapus, tetapi <strong>tidak bisa di-upload</strong>.
+            {' '}<a href="/paket" className="storage-warning-link">Upgrade paket</a> atau hapus bucket lain untuk mengaktifkannya.
+          </div>
+        )}
 
         {/* Stat Cards */}
         <div className="storage-stats">
@@ -310,9 +317,11 @@ export default function StoragePage() {
                     <td className="storage-table-meta">{bucket.object_count ?? 0}</td>
                     <td className="storage-table-meta">{formatBytes(bucket.total_size_bytes ?? 0)}</td>
                     <td>
-                      <span className={`status-badge status-badge--${bucket.status}`}>
-                        {bucket.status === 'active' ? '● Aktif' : bucket.status}
-                      </span>
+                      {bucket.dormant
+                        ? <span className="status-badge status-badge--dormant" title="Melebihi batas jumlah bucket paket — terkunci dari upload">● Dorman</span>
+                        : <span className={`status-badge status-badge--${bucket.status}`}>
+                            {bucket.status === 'active' ? '● Aktif' : bucket.status}
+                          </span>}
                     </td>
                     <td className="storage-table-meta">{formatDate(bucket.created_at)}</td>
                     <td>

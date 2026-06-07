@@ -124,18 +124,15 @@ def recalculate_hosting(db: Session, subscription: Subscription) -> UsageCounter
 
 
 def is_over_limit(subscription: Subscription, counter: UsageCounter) -> bool:
-    """Cek apakah pemakaian melebihi limit plan (sesuai kategori)."""
+    """
+    Cek apakah pemakaian melebihi limit plan — HANYA dimensi KAPASITAS (byte).
+
+    Kelebihan JUMLAH (bucket/situs) tidak lagi memicu OVER_QUOTA langganan;
+    itu ditangani lewat *dormancy per-resource* (resource terlama tetap aktif,
+    yang berlebih/terbaru dorman). Lihat _dormant_bucket_ids / _dormant_site_ids.
+    """
     plan = subscription.plan
-    if subscription.category == "hosting":
-        if plan.storage_limit_bytes and counter.storage_used_bytes > plan.storage_limit_bytes:
-            return True
-        if plan.static_site_limit and counter.static_site_count > plan.static_site_limit:
-            return True
-        return False
-    # storage
     if plan.storage_limit_bytes and counter.storage_used_bytes > plan.storage_limit_bytes:
-        return True
-    if plan.bucket_limit and counter.bucket_count > plan.bucket_limit:
         return True
     return False
 

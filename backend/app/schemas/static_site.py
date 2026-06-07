@@ -29,6 +29,7 @@ class SiteResponse(BaseModel):
     url: str = ""
     active_deployment_id: int | None
     created_at: datetime
+    dormant: bool = False  # melebihi batas jumlah situs paket (terbaru) → terkunci dari deploy
     # ringkasan deployment aktif
     last_deployed_at: datetime | None = None
     total_size_bytes: int = 0

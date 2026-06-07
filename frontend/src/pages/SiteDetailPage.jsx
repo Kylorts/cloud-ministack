@@ -210,9 +210,24 @@ export default function SiteDetailPage() {
           <div className="site-header-actions">
             <button className="btn-danger-outline" onClick={() => setShowDelete(true)}>Hapus Situs</button>
             <a href={site.url} target="_blank" rel="noreferrer" className="btn-outline">Buka Situs</a>
-            <button className="btn-primary-dark" onClick={() => setShowDeploy(true)}>Deploy Versi Baru</button>
+            <button
+              className="btn-primary-dark"
+              onClick={() => setShowDeploy(true)}
+              disabled={site.dormant}
+              title={site.dormant ? 'Situs dorman — tidak bisa deploy' : 'Deploy versi baru'}
+            >
+              Deploy Versi Baru
+            </button>
           </div>
         </div>
+
+        {site.dormant && (
+          <div className="site-dormant-banner">
+            ⚠ Situs ini <strong>dorman</strong> karena melebihi batas jumlah situs paket Anda.
+            Anda masih bisa mengelola/menghapus, tetapi <strong>tidak bisa deploy versi baru</strong>.
+            Upgrade paket atau hapus situs lain untuk mengaktifkannya kembali.
+          </div>
+        )}
 
         {/* Active deployment */}
         {activeDep ? (

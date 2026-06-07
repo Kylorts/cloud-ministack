@@ -109,6 +109,27 @@ def _require_can_add(sub: Subscription) -> None:
         )
 
 
+def _dormant_site_ids(db: Session, user_id: int, limit: int | None) -> set[int]:
+    """
+    ID situs DORMAN: bila jumlah situs aktif > limit paket, situs TERBARU
+    yang melebihi batas dianggap dorman (terkunci dari deploy). Situs terlama
+    (sampai sebatas limit) tetap aktif.
+    """
+    if not limit:
+        return set()
+    rows = (
+        db.query(StaticSite.id)
+        .filter(
+            StaticSite.user_id == user_id,
+            StaticSite.status == SiteStatus.active,
+        )
+        .order_by(StaticSite.created_at.asc())
+        .all()
+    )
+    ids = [r.id for r in rows]
+    return set(ids[limit:])
+
+
 def _slugify(name: str) -> str:
     s = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
     return s[:50] or "site"
@@ -132,9 +153,10 @@ def _unique_deployment_ref(db: Session) -> str:
             return ref
 
 
-def _site_to_response(site: StaticSite, db: Session) -> SiteResponse:
+def _site_to_response(site: StaticSite, db: Session, dormant: bool = False) -> SiteResponse:
     resp = SiteResponse.model_validate(site)
     resp.url = f"{BASE_URL}/sites/{site.slug}/"
+    resp.dormant = dormant
     if site.active_deployment_id:
         dep = db.get(StaticSiteDeployment, site.active_deployment_id)
         if dep:
@@ -229,7 +251,8 @@ def list_sites(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _get_active_hosting_sub(current_user.id, db)
+    sub = _get_active_hosting_sub(current_user.id, db)
+    dormant_ids = _dormant_site_ids(db, current_user.id, sub.plan.static_site_limit)
     sites = (
         db.query(StaticSite)
         .filter(
@@ -239,7 +262,7 @@ def list_sites(
         .order_by(StaticSite.created_at.desc())
         .all()
     )
-    return [_site_to_response(s, db) for s in sites]
+    return [_site_to_response(s, db, dormant=s.id in dormant_ids) for s in sites]
 
 
 @router.post("/sites", response_model=SiteResponse, status_code=status.HTTP_201_CREATED)
@@ -296,7 +319,7 @@ def get_site(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _get_active_hosting_sub(current_user.id, db)
+    sub = _get_active_hosting_sub(current_user.id, db)
     site = db.query(StaticSite).filter(
         StaticSite.id == site_id,
         StaticSite.user_id == current_user.id,
@@ -308,7 +331,8 @@ def get_site(
     # Sinkronkan dgn MiniStack — bersihkan deployment yang filenya hilang
     _sync_site_deployments(db, site)
 
-    base = _site_to_response(site, db)
+    is_dormant = site.id in _dormant_site_ids(db, current_user.id, sub.plan.static_site_limit)
+    base = _site_to_response(site, db, dormant=is_dormant)
     detail = SiteDetailResponse(**base.model_dump())
 
     deployments = (
@@ -342,6 +366,14 @@ async def deploy_site(
     ).first()
     if not site:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Situs tidak ditemukan")
+
+    # Situs dorman (melebihi batas jumlah situs paket) → tidak boleh deploy
+    if site.id in _dormant_site_ids(db, current_user.id, sub.plan.static_site_limit):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Situs ini dorman karena melebihi batas jumlah situs paket Anda. "
+                   "Upgrade paket atau hapus situs lain untuk mengaktifkannya kembali.",
+        )
 
     raw = await file.read()
     if not zipfile.is_zipfile(io.BytesIO(raw)):

@@ -55,7 +55,7 @@ def _get_active_subscription(user_id: int, db: Session) -> Subscription:
 
 
 def _require_can_add(sub: Subscription) -> None:
-    """Blok penambahan resource baru jika OVER_QUOTA atau SUSPENDED."""
+    """Blok penambahan resource baru jika OVER_QUOTA (byte) atau SUSPENDED."""
     if sub.status == SubscriptionStatus.over_quota:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -67,6 +67,27 @@ def _require_can_add(sub: Subscription) -> None:
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Langganan Anda sedang disuspend. Hubungi admin atau perbarui langganan.",
         )
+
+
+def _dormant_bucket_ids(db: Session, user_id: int, limit: int | None) -> set[int]:
+    """
+    ID bucket yang DORMAN: bila jumlah bucket aktif > limit paket, bucket
+    TERBARU yang melebihi batas dianggap dorman (terkunci dari upload).
+    Bucket terlama (sampai sebatas limit) tetap aktif.
+    """
+    if not limit:
+        return set()
+    rows = (
+        db.query(StorageBucket.id)
+        .filter(
+            StorageBucket.user_id == user_id,
+            StorageBucket.status == BucketStatus.active,
+        )
+        .order_by(StorageBucket.created_at.asc())
+        .all()
+    )
+    ids = [r.id for r in rows]
+    return set(ids[limit:])  # sisanya (terbaru) di luar batas → dorman
 
 
 def _make_internal_name(user_id: int, display_name: str, db: Session) -> str:
@@ -118,7 +139,8 @@ def list_buckets(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _get_active_subscription(current_user.id, db)
+    sub = _get_active_subscription(current_user.id, db)
+    dormant_ids = _dormant_bucket_ids(db, current_user.id, sub.plan.bucket_limit)
 
     buckets = (
         db.query(StorageBucket)
@@ -146,6 +168,7 @@ def list_buckets(
         )
         bucket.object_count = stats.object_count if stats else 0
         bucket.total_size_bytes = int(stats.total_size_bytes) if stats else 0
+        bucket.dormant = bucket.id in dormant_ids
         result.append(bucket)
 
     return result
@@ -222,7 +245,7 @@ def get_bucket(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _get_active_subscription(current_user.id, db)
+    sub = _get_active_subscription(current_user.id, db)
 
     bucket = db.query(StorageBucket).filter(
         StorageBucket.id == bucket_id,
@@ -232,6 +255,8 @@ def get_bucket(
 
     if not bucket:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bucket tidak ditemukan")
+
+    bucket.dormant = bucket.id in _dormant_bucket_ids(db, current_user.id, sub.plan.bucket_limit)
     return bucket
 
 
@@ -325,6 +350,14 @@ async def upload_file(
     sub = _get_active_subscription(current_user.id, db)
     _require_can_add(sub)
     bucket = _get_bucket_or_404(bucket_id, current_user.id, db)
+
+    # Bucket dorman (melebihi batas jumlah paket) → tidak boleh upload
+    if bucket.id in _dormant_bucket_ids(db, current_user.id, sub.plan.bucket_limit):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Bucket ini dorman karena melebihi batas jumlah bucket paket Anda. "
+                   "Upgrade paket atau hapus bucket lain untuk mengaktifkannya kembali.",
+        )
 
     file_data = await file.read()
     file_size = len(file_data)

@@ -333,6 +333,7 @@
 .status-badge--active { color: #16a34a; }
 .status-badge--creating { color: #ca8a04; }
 .status-badge--failed { color: #dc2626; }
+.status-badge--dormant { color: #b45309; }
 
 .bucket-open-btn {
   font-size: 13px;

@@ -165,6 +165,13 @@ export default function HostingPage() {
             Langganan hosting Anda disuspend. Layanan dibatasi sementara.
           </div>
         )}
+        {sites.some((s) => s.dormant) && (
+          <div className="hosting-warning-banner">
+            ℹ Beberapa situs <strong>dorman</strong> karena melebihi batas jumlah situs paket Anda
+            (situs terbaru). Situs dorman masih bisa dikelola/dihapus, tetapi <strong>tidak bisa deploy baru</strong>.
+            {' '}<a href="/paket?kategori=hosting" className="hosting-warning-link">Upgrade paket</a> atau hapus situs lain.
+          </div>
+        )}
 
         {/* Stat cards */}
         <div className="hosting-stats">
@@ -205,9 +212,11 @@ export default function HostingPage() {
                   </div>
                 </td>
                 <td>
-                  <span className={`site-status site-status--${site.status}`}>
-                    {site.status === 'active' ? 'Aktif' : site.status === 'suspended' ? 'Ditangguhkan' : site.status}
-                  </span>
+                  {site.dormant
+                    ? <span className="site-status site-status--dormant" title="Melebihi batas jumlah situs paket — terkunci dari deploy">Dorman</span>
+                    : <span className={`site-status site-status--${site.status}`}>
+                        {site.status === 'active' ? 'Aktif' : site.status === 'suspended' ? 'Ditangguhkan' : site.status}
+                      </span>}
                 </td>
                 <td className="hosting-table-meta">{site.last_deployed_at ? formatDate(site.last_deployed_at) : 'Belum deploy'}</td>
                 <td>

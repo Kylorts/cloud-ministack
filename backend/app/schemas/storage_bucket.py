@@ -34,6 +34,7 @@ class BucketResponse(BaseModel):
     created_at: datetime
     object_count: int = 0
     total_size_bytes: int = 0
+    dormant: bool = False  # melebihi batas jumlah bucket paket (terbaru) → terkunci dari upload
 
     model_config = {"from_attributes": True}
 
