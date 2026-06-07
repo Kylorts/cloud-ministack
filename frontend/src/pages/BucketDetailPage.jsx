@@ -108,23 +108,24 @@ function UploadModal({ bucketId, maxFileSizeBytes, storageUsedBytes, storageLimi
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [dragging, setDragging] = useState(false)
+  const [progress, setProgress] = useState(0)
+
+  const maxMb = maxFileSizeBytes ? (maxFileSizeBytes / (1024 * 1024)).toFixed(0) : null
 
   function validateAndSetFile(f) {
     if (!f) return
     if (maxFileSizeBytes && f.size > maxFileSizeBytes) {
-      const maxMb = (maxFileSizeBytes / (1024 * 1024)).toFixed(0)
-      setFileSizeError(`File terlalu besar. Maksimal ${maxMb} MB untuk paket Anda (file ini ${formatBytes(f.size)}).`)
+      setFileSizeError(`File terlalu besar. Maksimal ${maxMb} MB per file (file ini ${formatBytes(f.size)}).`)
     } else if (storageLimitBytes && (storageUsedBytes + f.size) > storageLimitBytes) {
       const sisa = storageLimitBytes - storageUsedBytes
-      setFileSizeError(`Kuota storage tidak cukup. Sisa ruang: ${formatBytes(sisa)}, ukuran file: ${formatBytes(f.size)}.`)
+      setFileSizeError(`Kuota storage tidak cukup. Sisa ruang: ${formatBytes(sisa)}.`)
     } else {
       setFileSizeError('')
     }
     setFile(f)
+    setProgress(0)
   }
 
-  function handleDragOver(e) { e.preventDefault(); setDragging(true) }
-  function handleDragLeave(e) { e.preventDefault(); setDragging(false) }
   function handleDrop(e) {
     e.preventDefault()
     setDragging(false)
@@ -136,19 +137,19 @@ function UploadModal({ bucketId, maxFileSizeBytes, storageUsedBytes, storageLimi
     if (!file || fileSizeError) return
     setError('')
     setLoading(true)
+    setProgress(0)
     try {
-      await uploadFile(bucketId, file)
+      await uploadFile(bucketId, file, setProgress)
       onSuccess()
     } catch (err) {
       const detail = err.response?.data?.detail
       setError(Array.isArray(detail) ? detail[0]?.msg : (detail || 'Gagal mengunggah file'))
-    } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-overlay" onClick={() => !loading && onClose()}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2 className="modal-title">Unggah File</h2>
@@ -158,54 +159,46 @@ function UploadModal({ bucketId, maxFileSizeBytes, storageUsedBytes, storageLimi
 
           {/* Drop Zone */}
           <label
-            className={`drop-zone ${dragging ? 'drop-zone--active' : ''} ${file ? 'drop-zone--has-file' : ''}`}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
+            className={`up-drop ${dragging ? 'up-drop--active' : ''}`}
+            onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
+            onDragLeave={(e) => { e.preventDefault(); setDragging(false) }}
             onDrop={handleDrop}
           >
-            <input
-              type="file"
-              style={{ display: 'none' }}
-              onChange={(e) => validateAndSetFile(e.target.files[0])}
-            />
-            {!file ? (
-              <>
-                <div className="drop-zone-icon">
-                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"
-                      stroke={dragging ? '#062F28' : '#9ca3af'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </div>
-                <p className="drop-zone-text">
-                  {dragging ? 'Lepaskan file di sini' : 'Drag & drop file ke sini'}
-                </p>
-                <p className="drop-zone-sub">
-                  atau <span className="drop-zone-browse">klik untuk memilih file</span>
-                </p>
-              </>
-            ) : (
-              <>
-                <div className="drop-zone-icon drop-zone-icon--file">
-                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="#16a34a" strokeWidth="1.5"/>
-                    <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" stroke="#16a34a" strokeWidth="1.5" strokeLinecap="round"/>
-                  </svg>
-                </div>
-                <p className="drop-zone-filename">{file.name}</p>
-                <p className="drop-zone-sub">
-                  {formatBytes(file.size)} · <span className="drop-zone-browse">ganti file</span>
-                </p>
-              </>
-            )}
+            <input type="file" style={{ display: 'none' }}
+              onChange={(e) => validateAndSetFile(e.target.files[0])} />
+            <div className="up-drop-icon">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"
+                  stroke="#062F28" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
+            <p className="up-drop-text">Klik untuk memilih file atau seret file ke sini.</p>
+            {maxMb && <p className="up-drop-sub">(Maks {maxMb}MB per file)</p>}
           </label>
+
+          {/* File terpilih + progress */}
+          {file && (
+            <div className="up-file-row">
+              <div className="up-file-head">
+                <span className="up-file-name">
+                  <span className="up-file-type">{getFileTypeBadge(file.type, file.name)}</span>
+                  {file.name}
+                </span>
+                <span className={`up-file-pct ${progress === 100 && !loading ? '' : ''}`}>
+                  {loading ? `${progress}% (Uploading...)` : (progress === 100 ? 'Selesai' : formatBytes(file.size))}
+                </span>
+              </div>
+              <div className="up-progress"><div className="up-progress-fill" style={{ width: `${loading || progress ? progress : 0}%` }} /></div>
+            </div>
+          )}
 
           {fileSizeError && <div className="modal-error">{fileSizeError}</div>}
           {error && <div className="modal-error">{error}</div>}
 
           <div className="modal-actions">
-            <button type="button" className="modal-btn-cancel" onClick={onClose}>Batal</button>
+            <button type="button" className="modal-btn-cancel" onClick={onClose} disabled={loading}>Tutup</button>
             <button type="submit" className="modal-btn-submit" disabled={loading || !file || !!fileSizeError}>
-              {loading ? 'Mengunggah...' : 'Unggah File'}
+              {loading ? 'Mengunggah...' : 'Mulai Unggah'}
             </button>
           </div>
         </form>

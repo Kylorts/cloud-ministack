@@ -132,6 +132,19 @@ export default function HostingPage() {
           </button>
         </div>
 
+        {usage?.subscription_status === 'over_quota' && (
+          <div className="hosting-warning-banner">
+            ⚠ Kuota hosting terlampaui (OVER_QUOTA). Anda masih bisa melihat & menghapus,
+            tetapi <strong>tidak bisa membuat situs / deploy baru</strong>.
+            {' '}<a href="/paket?kategori=hosting" className="hosting-warning-link">Upgrade paket</a> atau kurangi pemakaian.
+          </div>
+        )}
+        {usage?.subscription_status === 'suspended' && (
+          <div className="hosting-warning-banner">
+            🚫 Langganan hosting Anda disuspend. Layanan dibatasi sementara.
+          </div>
+        )}
+
         {/* Stat cards */}
         <div className="hosting-stats">
           <div className="hosting-stat-card">

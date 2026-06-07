@@ -123,6 +123,42 @@ def recalculate_hosting(db: Session, subscription: Subscription) -> UsageCounter
     return counter
 
 
+def is_over_limit(subscription: Subscription, counter: UsageCounter) -> bool:
+    """Cek apakah pemakaian melebihi limit plan (sesuai kategori)."""
+    plan = subscription.plan
+    if subscription.category == "hosting":
+        if plan.storage_limit_bytes and counter.storage_used_bytes > plan.storage_limit_bytes:
+            return True
+        if plan.static_site_limit and counter.static_site_count > plan.static_site_limit:
+            return True
+        return False
+    # storage
+    if plan.storage_limit_bytes and counter.storage_used_bytes > plan.storage_limit_bytes:
+        return True
+    if plan.bucket_limit and counter.bucket_count > plan.bucket_limit:
+        return True
+    return False
+
+
+def evaluate_quota_status(db: Session, subscription) -> None:
+    """
+    Transisi status active <-> over_quota berdasarkan usage saat ini.
+    Dipanggil setelah perubahan plan / recalc. Tidak menyentuh status
+    final (cancelled/expired/terminated/suspended ditangani terpisah).
+    """
+    from app.models.subscription import SubscriptionStatus
+
+    counter = get_or_create_counter(db, subscription)
+    over = is_over_limit(subscription, counter)
+
+    if over and subscription.status == SubscriptionStatus.active:
+        subscription.status = SubscriptionStatus.over_quota
+        subscription.over_quota_since = datetime.utcnow()
+    elif not over and subscription.status == SubscriptionStatus.over_quota:
+        subscription.status = SubscriptionStatus.active
+        subscription.over_quota_since = None
+
+
 def add_object(db: Session, subscription: Subscription, size_bytes: int) -> None:
     counter = get_or_create_counter(db, subscription)
     counter.storage_used_bytes += size_bytes

@@ -63,9 +63,39 @@ def serve_site(slug: str, path: str = "", db: Session = Depends(get_db)):
             try:
                 data, content_type = get_hosting_file(f"{dep.deployment_path}/{path}/index.html")
             except Exception:
+                _cleanup_if_orphaned(db, site, dep)
                 raise HTTPException(status_code=404, detail="File tidak ditemukan")
         else:
+            _cleanup_if_orphaned(db, site, dep)
             raise HTTPException(status_code=404, detail="File tidak ditemukan")
 
     _count_bandwidth(db, site, len(data))
     return Response(content=data, media_type=content_type)
+
+
+def _cleanup_if_orphaned(db: Session, site: StaticSite, dep: StaticSiteDeployment) -> None:
+    """
+    Jika file deployment ini sudah tidak ada di MiniStack (mis. MiniStack
+    di-rebuild), hapus deployment dari DB & kosongkan active jika perlu.
+    """
+    from botocore.exceptions import ClientError as BotoClientError
+    from app.core.ministack import get_s3_client, HOSTING_BUCKET, _ensure_bucket_exists
+    from app.core import usage as usage_helper
+
+    s3 = get_s3_client()
+    try:
+        _ensure_bucket_exists(s3, HOSTING_BUCKET)
+        resp = s3.list_objects_v2(Bucket=HOSTING_BUCKET, Prefix=f"{dep.deployment_path}/")
+        if resp.get("Contents"):
+            return  # file masih ada, bukan orphan
+    except BotoClientError:
+        return
+
+    if site.active_deployment_id == dep.id:
+        site.active_deployment_id = None
+    db.delete(dep)
+    db.flush()
+    sub = db.get(Subscription, site.subscription_id)
+    if sub:
+        usage_helper.recalculate_hosting(db, sub)
+    db.commit()

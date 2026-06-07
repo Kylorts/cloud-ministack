@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routers import auth, admin, plans, subscriptions, storage, activity, hosting, gateway
+from app.routers import auth, admin, plans, subscriptions, storage, activity, hosting, gateway, access_keys
 
 app = FastAPI(
     title="INI AWAN API",
@@ -26,6 +26,7 @@ app.include_router(storage.router)
 app.include_router(activity.router)
 app.include_router(hosting.router)
 app.include_router(gateway.router)
+app.include_router(access_keys.router)
 
 
 @app.get("/", tags=["health"])

@@ -80,7 +80,7 @@ PLAN_SEEDS = [
         "bandwidth_limit_bytes": 100 * 1_048_576,         # 100 MB (spec)
         "bucket_limit": 0,
         "static_site_limit": 1,
-        "access_key_limit": 0,
+        "access_key_limit": 1,
     },
     {
         "name": "Hosting Basic",
@@ -93,7 +93,7 @@ PLAN_SEEDS = [
         "bandwidth_limit_bytes": 300 * 1_048_576,         # 300 MB (spec)
         "bucket_limit": 0,
         "static_site_limit": 2,
-        "access_key_limit": 0,
+        "access_key_limit": 2,
     },
     {
         "name": "Hosting Plus",
@@ -106,7 +106,7 @@ PLAN_SEEDS = [
         "bandwidth_limit_bytes": 1 * 1_073_741_824,       # 1 GB (spec)
         "bucket_limit": 0,
         "static_site_limit": 3,
-        "access_key_limit": 0,
+        "access_key_limit": 3,
     },
 ]
 

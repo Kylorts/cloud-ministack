@@ -12,11 +12,14 @@ export const deleteBucket = (id) => api.delete(`/storage/buckets/${id}`)
 // Objects
 export const getObjects = (bucketId) => api.get(`/storage/buckets/${bucketId}/objects`)
 
-export const uploadFile = (bucketId, file) => {
+export const uploadFile = (bucketId, file, onProgress) => {
   const formData = new FormData()
   formData.append('file', file)
   return api.post(`/storage/buckets/${bucketId}/objects`, formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
+    onUploadProgress: (e) => {
+      if (onProgress && e.total) onProgress(Math.round((e.loaded / e.total) * 100))
+    },
   })
 }
 

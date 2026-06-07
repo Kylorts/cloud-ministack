@@ -11,6 +11,8 @@ import KuotaPage from './pages/KuotaPage'
 import AktivitasPage from './pages/AktivitasPage'
 import HostingPage from './pages/HostingPage'
 import SiteDetailPage from './pages/SiteDetailPage'
+import AccessKeysPage from './pages/AccessKeysPage'
+import KeamananPage from './pages/KeamananPage'
 
 function PrivateRoute({ children }) {
   return isAuthenticated() ? children : <Navigate to="/login" replace />
@@ -67,6 +69,14 @@ export default function App() {
 
       <Route path="/hosting/sites/:id" element={
         <PrivateRoute><SiteDetailPage /></PrivateRoute>
+      } />
+
+      <Route path="/access-keys" element={
+        <PrivateRoute><AccessKeysPage /></PrivateRoute>
+      } />
+
+      <Route path="/keamanan" element={
+        <PrivateRoute><KeamananPage /></PrivateRoute>
       } />
 
       <Route path="/" element={<RoleRoute />} />

@@ -4,7 +4,8 @@ import { logout, getStoredUser } from '../services/auth'
 import Sidebar from '../components/Sidebar'
 import { getMySubscription } from '../services/subscriptions'
 import { getBuckets, getStorageUsage } from '../services/storage'
-import { getHostingUsage } from '../services/hosting'
+import { getHostingUsage, getSites } from '../services/hosting'
+import { getAccessKeys } from '../services/accessKeys'
 import './DashboardPage.css'
 
 /* ── Icons ─────────────────────────────────────────────────── */
@@ -98,6 +99,13 @@ function GlobeIcon() {
     </svg>
   )
 }
+function KeyIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+      <path d="M21 2l-2 2m-7.6 7.6a5.5 5.5 0 1 1-7.78 7.78 5.5 5.5 0 0 1 7.78-7.78zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3" stroke="#062F28" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
 
 function formatBytes(bytes) {
   if (!bytes) return '0 B'
@@ -151,6 +159,9 @@ export default function DashboardPage() {
   const [showNoSubModal, setShowNoSubModal] = useState(false)
   const [usage, setUsage] = useState(null)
   const [hostingUsage, setHostingUsage] = useState(null)
+  const [sites, setSites] = useState([])
+  const [storageKeys, setStorageKeys] = useState([])
+  const [hostingKeys, setHostingKeys] = useState([])
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const dropdownRef = useRef(null)
   const navigate = useNavigate()
@@ -161,6 +172,9 @@ export default function DashboardPage() {
     getBuckets().then((r) => setBuckets(r.data)).catch(() => setBuckets([]))
     getStorageUsage().then((r) => setUsage(r.data)).catch(() => setUsage(null))
     getHostingUsage().then((r) => setHostingUsage(r.data)).catch(() => setHostingUsage(null))
+    getSites().then((r) => setSites(r.data)).catch(() => setSites([]))
+    getAccessKeys('storage').then((r) => setStorageKeys(r.data)).catch(() => setStorageKeys([]))
+    getAccessKeys('hosting').then((r) => setHostingKeys(r.data)).catch(() => setHostingKeys([]))
   }, [])
 
   useEffect(() => {
@@ -336,6 +350,7 @@ export default function DashboardPage() {
 
         {/* Bottom Grid */}
         <div className="bottom-grid">
+         <div className="bottom-left-col">
           {/* Bucket List */}
           <div className="table-card">
             <div className="table-card-header">
@@ -403,6 +418,83 @@ export default function DashboardPage() {
             )}
           </div>
 
+          {/* Static Hosting List */}
+          <div className="table-card">
+            <div className="table-card-header">
+              <h2 className="table-card-title">Static Hosting</h2>
+              {hostingUsage && (
+                <Link to="/hosting" className="table-link">Lihat Semua <ExternalLinkIcon /></Link>
+              )}
+            </div>
+            {!hostingUsage ? (
+              <div className="table-no-sub">
+                <GlobeIcon />
+                <p className="table-no-sub-text">Belum berlangganan hosting.</p>
+                <button className="table-no-sub-btn" onClick={() => navigate('/paket?kategori=hosting')}>Pilih Paket →</button>
+              </div>
+            ) : (
+              <table className="data-table">
+                <thead>
+                  <tr><th>Nama Situs</th><th>Status</th><th>Aksi</th></tr>
+                </thead>
+                <tbody>
+                  {sites.length === 0 ? (
+                    <tr>
+                      <td colSpan={3} style={{ textAlign: 'center', padding: '24px', color: '#9ca3af', fontSize: '13px' }}>
+                        Belum ada situs.{' '}
+                        <Link to="/hosting" style={{ color: '#062F28', fontWeight: 600 }}>Buat situs pertama →</Link>
+                      </td>
+                    </tr>
+                  ) : (
+                    sites.slice(0, 3).map((s) => (
+                      <tr key={s.id}>
+                        <td>
+                          <div className="resource-name-cell">
+                            <span className="resource-dot" />
+                            <div>
+                              <span className="resource-name">{s.site_name}</span>
+                              <span className="resource-id">{s.slug}</span>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="util-cell">{s.status === 'active' ? '● Aktif' : s.status}</td>
+                        <td>
+                          <button className="action-btn" onClick={() => navigate(`/hosting/sites/${s.id}`)}>Kelola</button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          {/* Access Keys Summary */}
+          <div className="table-card">
+            <div className="table-card-header">
+              <h2 className="table-card-title">Access Keys</h2>
+              <Link to="/access-keys" className="table-link">Kelola <ExternalLinkIcon /></Link>
+            </div>
+            <div className="ak-summary">
+              <div className="ak-summary-item">
+                <span className="ak-summary-icon"><KeyIcon /></span>
+                <div className="ak-summary-text">
+                  <span className="ak-summary-label">Storage</span>
+                  <span className="ak-summary-count">{storageKeys.filter((k) => k.status === 'active').length} kunci aktif</span>
+                </div>
+              </div>
+              <div className="ak-summary-divider" />
+              <div className="ak-summary-item">
+                <span className="ak-summary-icon"><KeyIcon /></span>
+                <div className="ak-summary-text">
+                  <span className="ak-summary-label">Hosting</span>
+                  <span className="ak-summary-count">{hostingKeys.filter((k) => k.status === 'active').length} kunci aktif</span>
+                </div>
+              </div>
+            </div>
+          </div>
+         </div>
+
           {/* Quick Links */}
           <div className="table-card">
             <div className="table-card-header">
@@ -438,6 +530,14 @@ export default function DashboardPage() {
                 <div className="quick-link-text">
                   <span className="quick-link-title">Detail Langganan</span>
                   <span className="quick-link-desc">Status dan periode aktif</span>
+                </div>
+                <ExternalLinkIcon />
+              </Link>
+              <Link to="/access-keys" className="quick-link-item">
+                <span className="quick-link-icon"><KeyIcon /></span>
+                <div className="quick-link-text">
+                  <span className="quick-link-title">Access Keys</span>
+                  <span className="quick-link-desc">Kredensial akses programatik</span>
                 </div>
                 <ExternalLinkIcon />
               </Link>

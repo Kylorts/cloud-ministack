@@ -202,6 +202,19 @@ export default function StoragePage() {
           </button>
         </div>
 
+        {usage?.subscription_status === 'over_quota' && (
+          <div className="storage-warning-banner storage-warning-banner--danger">
+            ⚠ Kuota terlampaui (OVER_QUOTA). Anda masih bisa melihat, mengunduh, dan menghapus,
+            tetapi <strong>tidak bisa menambah bucket atau upload file baru</strong>.
+            {' '}<a href="/paket" className="storage-warning-link">Upgrade paket</a> atau kurangi pemakaian.
+          </div>
+        )}
+        {usage?.subscription_status === 'suspended' && (
+          <div className="storage-warning-banner storage-warning-banner--danger">
+            🚫 Langganan Anda disuspend. Layanan dibatasi sementara.
+          </div>
+        )}
+
         {/* Stat Cards */}
         <div className="storage-stats">
           <div className="storage-stat-card">

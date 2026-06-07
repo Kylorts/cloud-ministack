@@ -23,6 +23,12 @@ function ChartIcon() {
 function ClockIcon() {
   return <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.7"/><path d="M12 7v5l3 2" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
 }
+function KeyIcon() {
+  return <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M21 2l-2 2m-7.6 7.6a5.5 5.5 0 1 1-7.78 7.78 5.5 5.5 0 0 1 7.78-7.78zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
+}
+function ShieldIcon() {
+  return <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3Z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round"/><path d="M9 12l2 2 4-4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
+}
 function LogoutIcon() {
   return <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
 }
@@ -36,6 +42,8 @@ const NAV_ITEMS = [
   { path: '/hosting',   label: 'Static Hosting', icon: GlobeIcon },
   { path: '/paket',     label: 'Pilih Paket', icon: PackageIcon },
   { path: '/langganan', label: 'Detail Langganan', icon: CardIcon },
+  { path: '/access-keys', label: 'Access Keys', icon: KeyIcon },
+  { path: '/keamanan',  label: 'Keamanan & MFA', icon: ShieldIcon },
   { path: '/kuota',     label: 'Penggunaan & Kuota', icon: ChartIcon },
   { path: '/aktivitas', label: 'Log Aktivitas', icon: ClockIcon },
 ]

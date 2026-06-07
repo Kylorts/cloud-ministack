@@ -1,10 +1,11 @@
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.activity import log_activity
 from app.core.deps import get_current_user
+from app.core.pin import require_pin
 from app.core import usage as usage_helper
 from app.database import get_db
 from app.models.plan import ServicePlan
@@ -108,6 +109,9 @@ def subscribe(
     else:
         usage_helper.recalculate(db, sub)
 
+    # Jika pemakaian existing melebihi limit plan baru → tandai OVER_QUOTA
+    usage_helper.evaluate_quota_status(db, sub)
+
     log_activity(
         db,
         actor_user_id=current_user.id,
@@ -128,7 +132,9 @@ def cancel_subscription(
     category: str = Query("storage"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    x_transaction_pin: str | None = Header(default=None, alias="X-Transaction-PIN"),
 ):
+    require_pin(current_user, x_transaction_pin)
     sub = _get_active_subscription(current_user.id, db, category=category)
     if not sub or sub.status != SubscriptionStatus.active:
         raise HTTPException(

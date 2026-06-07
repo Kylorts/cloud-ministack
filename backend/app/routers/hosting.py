@@ -5,14 +5,16 @@ import zipfile
 import mimetypes
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.core.activity import log_activity
 from app.core.deps import get_current_user
+from app.core.pin import require_pin
 from app.core import usage as usage_helper
 from app.core.ministack import (
     ensure_hosting_bucket, upload_hosting_file, delete_hosting_prefix,
+    get_s3_client, HOSTING_BUCKET,
 )
 from app.database import get_db
 from app.models.static_site import SiteStatus, StaticSite
@@ -66,13 +68,20 @@ def _blocked_ext(name: str) -> bool:
 
 # ── Helpers ────────────────────────────────────────────────────────
 
+ACCESS_STATUSES = [
+    SubscriptionStatus.active,
+    SubscriptionStatus.over_quota,
+    SubscriptionStatus.suspended,
+]
+
+
 def _get_active_hosting_sub(user_id: int, db: Session) -> Subscription:
     sub = (
         db.query(Subscription)
         .filter(
             Subscription.user_id == user_id,
             Subscription.category == "hosting",
-            Subscription.status == SubscriptionStatus.active,
+            Subscription.status.in_(ACCESS_STATUSES),
         )
         .order_by(Subscription.created_at.desc())
         .first()
@@ -83,6 +92,21 @@ def _get_active_hosting_sub(user_id: int, db: Session) -> Subscription:
             detail="Anda belum memiliki langganan Hosting aktif. Pilih paket Hosting terlebih dahulu.",
         )
     return sub
+
+
+def _require_can_add(sub: Subscription) -> None:
+    """Blok penambahan situs/deploy baru jika OVER_QUOTA atau SUSPENDED."""
+    if sub.status == SubscriptionStatus.over_quota:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Kuota hosting terlampaui (OVER_QUOTA). Anda masih bisa melihat & menghapus, "
+                   "tetapi tidak bisa membuat situs / deploy baru. Kurangi pemakaian atau upgrade paket.",
+        )
+    if sub.status == SubscriptionStatus.suspended:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Langganan hosting Anda sedang disuspend. Hubungi admin atau perbarui langganan.",
+        )
 
 
 def _slugify(name: str) -> str:
@@ -120,6 +144,46 @@ def _site_to_response(site: StaticSite, db: Session) -> SiteResponse:
     return resp
 
 
+def _sync_site_deployments(db: Session, site: StaticSite) -> None:
+    """
+    Sinkronisasi dengan MiniStack — hapus deployment yang filenya sudah
+    tidak ada (mis. MiniStack di-rebuild). Mirip sync object pada bucket.
+    """
+    from botocore.exceptions import ClientError as BotoClientError
+
+    deps = (
+        db.query(StaticSiteDeployment)
+        .filter(StaticSiteDeployment.site_id == site.id)
+        .all()
+    )
+    if not deps:
+        return
+
+    s3 = get_s3_client()
+    try:
+        ensure_hosting_bucket()
+        resp = s3.list_objects_v2(Bucket=HOSTING_BUCKET, Prefix=f"{site.slug}/")
+        existing = {o["Key"] for o in resp.get("Contents", [])}
+    except BotoClientError:
+        return  # MiniStack tak bisa diakses → jangan hapus apa-apa
+
+    changed = False
+    for dep in deps:
+        has_files = any(k.startswith(f"{dep.deployment_path}/") for k in existing)
+        if not has_files:
+            if site.active_deployment_id == dep.id:
+                site.active_deployment_id = None
+            db.delete(dep)
+            changed = True
+
+    if changed:
+        db.flush()
+        sub = db.get(Subscription, site.subscription_id)
+        if sub:
+            usage_helper.recalculate_hosting(db, sub)
+        db.commit()
+
+
 def _hosting_used_bytes(user_id: int, db: Session) -> int:
     """Total build size dari deployment aktif semua situs user."""
     sites = db.query(StaticSite).filter(
@@ -147,6 +211,7 @@ def hosting_usage(
     db.commit()
     build_limit = sub.plan.storage_limit_bytes
     return {
+        "subscription_status": sub.status.value if hasattr(sub.status, "value") else sub.status,
         "site_count": counter.static_site_count,
         "site_limit": sub.plan.static_site_limit,
         "build_used_bytes": counter.storage_used_bytes,
@@ -182,6 +247,7 @@ def create_site(
     db: Session = Depends(get_db),
 ):
     sub = _get_active_hosting_sub(current_user.id, db)
+    _require_can_add(sub)
 
     active_count = db.query(StaticSite).filter(
         StaticSite.user_id == current_user.id,
@@ -236,6 +302,9 @@ def get_site(
     if not site:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Situs tidak ditemukan")
 
+    # Sinkronkan dgn MiniStack — bersihkan deployment yang filenya hilang
+    _sync_site_deployments(db, site)
+
     base = _site_to_response(site, db)
     detail = SiteDetailResponse(**base.model_dump())
 
@@ -262,6 +331,7 @@ async def deploy_site(
     db: Session = Depends(get_db),
 ):
     sub = _get_active_hosting_sub(current_user.id, db)
+    _require_can_add(sub)
     site = db.query(StaticSite).filter(
         StaticSite.id == site_id,
         StaticSite.user_id == current_user.id,
@@ -514,7 +584,9 @@ def delete_site(
     site_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    x_transaction_pin: str | None = Header(default=None, alias="X-Transaction-PIN"),
 ):
+    require_pin(current_user, x_transaction_pin)
     sub = _get_active_hosting_sub(current_user.id, db)
     site = db.query(StaticSite).filter(
         StaticSite.id == site_id,

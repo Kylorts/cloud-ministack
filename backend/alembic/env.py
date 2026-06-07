@@ -16,6 +16,7 @@ import app.models.usage_counter   # noqa: F401
 import app.models.activity_log     # noqa: F401
 import app.models.static_site      # noqa: F401
 import app.models.static_site_deployment  # noqa: F401
+import app.models.access_key        # noqa: F401
 
 config = context.config
 

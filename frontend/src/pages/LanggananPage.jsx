@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Navbar from '../components/Navbar'
+import PinPromptModal from '../components/PinPromptModal'
 import { getMySubscription, cancelSubscription } from '../services/subscriptions'
 import { getStorageUsage } from '../services/storage'
 import { getHostingUsage } from '../services/hosting'
+import { getPinErrorCode } from '../services/security'
 import './LanggananPage.css'
 
 function formatBytes(bytes) {
@@ -30,6 +32,8 @@ export default function LanggananPage() {
   const [loading, setLoading] = useState(true)
   const [cancelling, setCancelling] = useState(false)
   const [error, setError] = useState('')
+  const [pinOpen, setPinOpen] = useState(false)
+  const [pinErr, setPinErr] = useState('')
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -44,14 +48,21 @@ export default function LanggananPage() {
     }).finally(() => setLoading(false))
   }, [])
 
-  async function handleCancel() {
-    if (!window.confirm('Yakin ingin membatalkan langganan? Anda tidak akan bisa menggunakan layanan storage setelah periode berakhir.')) return
+  async function handleCancel(pin) {
+    if (!pin && !window.confirm('Yakin ingin membatalkan langganan? Anda tidak akan bisa menggunakan layanan storage setelah periode berakhir.')) return
     setCancelling(true)
     try {
-      await cancelSubscription()
+      await cancelSubscription('storage', pin)
+      setPinOpen(false); setPinErr('')
       navigate('/paket')
     } catch (err) {
-      setError(err.response?.data?.detail || 'Gagal membatalkan langganan')
+      const code = getPinErrorCode(err)
+      if (code === 'PIN_REQUIRED') { setPinOpen(true); setPinErr('') }
+      else if (code === 'PIN_INVALID') { setPinErr('PIN Transaksi salah.') }
+      else {
+        const d = err.response?.data?.detail
+        setError(typeof d === 'string' ? d : 'Gagal membatalkan langganan')
+      }
     } finally {
       setCancelling(false)
     }
@@ -119,7 +130,7 @@ export default function LanggananPage() {
               </div>
 
               {subscription.status === 'active' && (
-                <button className="lan-cancel-btn" onClick={handleCancel} disabled={cancelling}>
+                <button className="lan-cancel-btn" onClick={() => handleCancel()} disabled={cancelling}>
                   {cancelling ? 'Membatalkan...' : '⊘ Batalkan Langganan'}
                 </button>
               )}
@@ -175,6 +186,16 @@ export default function LanggananPage() {
           <a href="#">Syarat &amp; Ketentuan</a>
         </div>
       </footer>
+
+      <PinPromptModal
+        open={pinOpen}
+        title="Batalkan Langganan"
+        description="Masukkan PIN Transaksi untuk membatalkan langganan ini."
+        error={pinErr}
+        busy={cancelling}
+        onSubmit={(pin) => handleCancel(pin)}
+        onClose={() => { setPinOpen(false); setPinErr('') }}
+      />
     </div>
   )
 }

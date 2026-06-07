@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import Navbar from '../components/Navbar'
+import PinPromptModal from '../components/PinPromptModal'
 import { getSite, deploySite, rollbackDeployment, deleteSite, deleteDeployment } from '../services/hosting'
+import { getPinErrorCode } from '../services/security'
 import './SiteDetailPage.css'
 
 function TrashIcon() {
@@ -123,6 +125,8 @@ export default function SiteDetailPage() {
   const [showDelete, setShowDelete] = useState(false)
   const [deleteDepTarget, setDeleteDepTarget] = useState(null)
   const [busy, setBusy] = useState(false)
+  const [pinOpen, setPinOpen] = useState(false)
+  const [pinErr, setPinErr] = useState('')
   const [page, setPage] = useState(1)
   const PAGE_SIZE = 5
 
@@ -150,13 +154,17 @@ export default function SiteDetailPage() {
     }
   }
 
-  async function confirmDelete() {
+  async function confirmDelete(pin) {
     setBusy(true)
     try {
-      await deleteSite(id)
+      await deleteSite(id, pin)
       navigate('/hosting', { replace: true })
     } catch (err) {
-      alert(err.response?.data?.detail || 'Gagal menghapus situs')
+      const code = getPinErrorCode(err)
+      if (code === 'PIN_REQUIRED') { setShowDelete(false); setPinOpen(true); setPinErr(''); setBusy(false); return }
+      if (code === 'PIN_INVALID') { setPinErr('PIN Transaksi salah.'); setBusy(false); return }
+      const d = err.response?.data?.detail
+      alert(typeof d === 'string' ? d : 'Gagal menghapus situs')
       setBusy(false)
     }
   }
@@ -334,7 +342,7 @@ export default function SiteDetailPage() {
             </div>
             <div className="modal-actions">
               <button className="modal-btn-cancel" onClick={() => setShowDelete(false)} disabled={busy}>Batal</button>
-              <button className="modal-btn-delete" onClick={confirmDelete} disabled={busy}>
+              <button className="modal-btn-delete" onClick={() => confirmDelete()} disabled={busy}>
                 {busy ? 'Menghapus...' : 'Ya, Hapus'}
               </button>
             </div>
@@ -364,6 +372,16 @@ export default function SiteDetailPage() {
           </div>
         </div>
       )}
+
+      <PinPromptModal
+        open={pinOpen}
+        title="Hapus Situs"
+        description="Masukkan PIN Transaksi untuk menghapus situs ini secara permanen."
+        error={pinErr}
+        busy={busy}
+        onSubmit={(pin) => confirmDelete(pin)}
+        onClose={() => { setPinOpen(false); setPinErr('') }}
+      />
     </div>
   )
 }

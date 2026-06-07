@@ -26,14 +26,23 @@ from app.schemas.storage_object import ObjectResponse
 router = APIRouter(prefix="/storage", tags=["storage"])
 
 
+# Status yang masih boleh mengakses & mengelola data (lihat/download/hapus)
+ACCESS_STATUSES = [
+    SubscriptionStatus.active,
+    SubscriptionStatus.over_quota,
+    SubscriptionStatus.suspended,
+]
+
+
 def _get_active_subscription(user_id: int, db: Session) -> Subscription:
     sub = (
         db.query(Subscription)
         .filter(
             Subscription.user_id == user_id,
-            Subscription.status == SubscriptionStatus.active,
+            Subscription.status.in_(ACCESS_STATUSES),
             Subscription.category == "storage",
         )
+        .order_by(Subscription.created_at.desc())
         .first()
     )
     if not sub:
@@ -42,6 +51,21 @@ def _get_active_subscription(user_id: int, db: Session) -> Subscription:
             detail="Anda belum memiliki langganan Storage aktif. Pilih paket Storage terlebih dahulu.",
         )
     return sub
+
+
+def _require_can_add(sub: Subscription) -> None:
+    """Blok penambahan resource baru jika OVER_QUOTA atau SUSPENDED."""
+    if sub.status == SubscriptionStatus.over_quota:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Kuota terlampaui (OVER_QUOTA). Anda masih bisa melihat, mengunduh, dan menghapus, "
+                   "tetapi tidak bisa menambah resource baru. Kurangi pemakaian atau upgrade paket.",
+        )
+    if sub.status == SubscriptionStatus.suspended:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Langganan Anda sedang disuspend. Hubungi admin atau perbarui langganan.",
+        )
 
 
 def _make_internal_name(user_id: int, display_name: str, db: Session) -> str:
@@ -68,6 +92,7 @@ def get_storage_usage(
 
     used_bytes = counter.storage_used_bytes
     return {
+        "subscription_status": sub.status.value if hasattr(sub.status, "value") else sub.status,
         "storage_used_bytes": used_bytes,
         "storage_limit_bytes": sub.plan.storage_limit_bytes,
         "storage_percent": round((used_bytes / sub.plan.storage_limit_bytes) * 100, 1) if sub.plan.storage_limit_bytes else 0,
@@ -131,6 +156,7 @@ def create_bucket_endpoint(
     db: Session = Depends(get_db),
 ):
     sub = _get_active_subscription(current_user.id, db)
+    _require_can_add(sub)
 
     active_count = (
         db.query(StorageBucket)
@@ -293,6 +319,7 @@ async def upload_file(
     db: Session = Depends(get_db),
 ):
     sub = _get_active_subscription(current_user.id, db)
+    _require_can_add(sub)
     bucket = _get_bucket_or_404(bucket_id, current_user.id, db)
 
     file_data = await file.read()
