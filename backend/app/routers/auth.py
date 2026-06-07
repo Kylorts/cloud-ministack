@@ -6,12 +6,13 @@ from app.core.deps import get_current_user
 from app.core.pin import require_pin, validate_pin_format
 from app.core.security import create_access_token, hash_password, verify_password
 from app.database import get_db
-from app.models.user import User, UserStatus
+from app.models.user import User, UserRole, UserStatus
 from app.schemas.auth import (
     ChangePasswordRequest,
     LoginRequest,
     LoginResponse,
     PinStatusResponse,
+    RegisterRequest,
     RemovePinRequest,
     SetPinRequest,
     UserPublic,
@@ -58,6 +59,38 @@ def login(body: LoginRequest, request: Request, db: Session = Depends(get_db)):
         access_token=token,
         user=UserPublic.model_validate(user),
     )
+
+
+@router.post("/register", response_model=LoginResponse, status_code=status.HTTP_201_CREATED)
+def register(body: RegisterRequest, request: Request, db: Session = Depends(get_db)):
+    email = str(body.email).lower().strip()
+    if db.query(User).filter(User.email == email).first():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Email sudah terdaftar. Silakan masuk atau gunakan email lain.",
+        )
+
+    user = User(
+        name=body.name.strip(),
+        email=email,
+        password_hash=hash_password(body.password),
+        role=UserRole.user,
+        status=UserStatus.active,
+    )
+    db.add(user)
+    db.flush()
+
+    token = create_access_token({"sub": str(user.id), "role": user.role.value})
+    log_activity(
+        db,
+        actor_user_id=user.id,
+        action="USER_REGISTERED",
+        description="Mendaftar akun baru",
+        ip_address=request.client.host if request.client else None,
+    )
+    db.commit()
+    db.refresh(user)
+    return LoginResponse(access_token=token, user=UserPublic.model_validate(user))
 
 
 @router.get("/me", response_model=UserPublic)
