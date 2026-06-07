@@ -211,7 +211,7 @@ export default function StoragePage() {
         )}
         {usage?.subscription_status === 'suspended' && (
           <div className="storage-warning-banner storage-warning-banner--danger">
-            🚫 Langganan Anda disuspend. Layanan dibatasi sementara.
+            Langganan Anda disuspend. Layanan dibatasi sementara.
           </div>
         )}
 

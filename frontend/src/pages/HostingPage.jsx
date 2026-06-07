@@ -141,7 +141,7 @@ export default function HostingPage() {
         )}
         {usage?.subscription_status === 'suspended' && (
           <div className="hosting-warning-banner">
-            🚫 Langganan hosting Anda disuspend. Layanan dibatasi sementara.
+            Langganan hosting Anda disuspend. Layanan dibatasi sementara.
           </div>
         )}
 
