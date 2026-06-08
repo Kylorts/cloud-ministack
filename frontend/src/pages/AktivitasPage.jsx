@@ -6,6 +6,8 @@ import './AktivitasPage.css'
 const ACTION_LABELS = {
   USER_LOGIN: 'Login Berhasil',
   PACKAGE_SUBSCRIBED: 'Berlangganan Paket',
+  PACKAGE_UPGRADED: 'Upgrade Paket',
+  USER_REGISTERED: 'Daftar Akun',
   SUBSCRIPTION_CANCELLED: 'Batalkan Langganan',
   BUCKET_CREATED: 'Buat Bucket',
   BUCKET_DELETED: 'Hapus Bucket',
@@ -89,7 +91,7 @@ export default function AktivitasPage() {
     if (filter === 'STORAGE') return l.action.startsWith('FILE_') || l.action.startsWith('BUCKET_')
     if (filter === 'HOSTING') return l.action.startsWith('STATIC_SITE')
     if (filter === 'KEY') return l.action.startsWith('ACCESS_KEY')
-    if (filter === 'AKUN') return l.action === 'USER_LOGIN' || l.action.includes('SUBSCRI') || l.action.includes('PACKAGE')
+    if (filter === 'AKUN') return l.action === 'USER_LOGIN' || l.action === 'USER_REGISTERED' || l.action.includes('SUBSCRI') || l.action.includes('PACKAGE')
     if (filter === 'KEAMANAN') return l.action.startsWith('PIN_') || l.action === 'PASSWORD_CHANGED'
     return true
   }

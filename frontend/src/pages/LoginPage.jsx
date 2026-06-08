@@ -83,7 +83,12 @@ export default function LoginPage() {
       const data = await login(email, password)
       navigate(data.user.role === 'admin' ? '/admin' : '/dashboard')
     } catch (err) {
-      const msg = err.response?.data?.detail || 'Terjadi kesalahan, coba lagi.'
+      const d = err.response?.data?.detail
+      let msg
+      if (Array.isArray(d)) msg = d[0]?.msg || 'Data tidak valid.'
+      else if (typeof d === 'string') msg = d
+      else if (err.response) msg = 'Email atau kata sandi salah.'
+      else msg = 'Tidak dapat terhubung ke server. Coba lagi.'
       setError(msg)
     } finally {
       setLoading(false)

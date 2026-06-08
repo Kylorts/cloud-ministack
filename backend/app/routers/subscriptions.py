@@ -96,23 +96,50 @@ def subscribe(
         )
 
     category = plan.category.value if hasattr(plan.category, "value") else str(plan.category)
-
-    # Enforcement "1 subscription aktif per kategori" di backend
-    active = _get_active_subscription(current_user.id, db, category=category)
-    if active and active.status == SubscriptionStatus.active:
-        label = "Hosting" if category == "hosting" else "Storage"
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"Anda sudah memiliki langganan {label} aktif. Batalkan terlebih dahulu sebelum memilih paket baru.",
-        )
-
     now = datetime.utcnow()
 
-    # Tutup subscription lama kategori yang sama yang belum final
+    active = _get_active_subscription(current_user.id, db, category=category)
+
     if active:
+        is_upgrade = float(plan.price) > float(active.plan.price)
+
+        # ── UPGRADE IN-PLACE (langsung) ───────────────────────────────
+        # Paket lebih mahal (kategori sama) → ubah plan pada langganan yang
+        # SAMA. Access key tetap hidup (subscription_id tak berubah), limit
+        # naik seketika, over_quota & dormancy pulih otomatis.
+        if is_upgrade:
+            active.plan_id = plan.id
+            active.current_period_start = now
+            active.current_period_end = now + timedelta(days=30)  # reset 30 hari
+            if category == "hosting":
+                usage_helper.recalculate_hosting(db, active)
+            else:
+                usage_helper.recalculate(db, active)
+            usage_helper.evaluate_quota_status(db, active)
+            log_activity(
+                db,
+                actor_user_id=current_user.id,
+                action="PACKAGE_UPGRADED",
+                description=f"Upgrade ke paket {plan.name}",
+                target_type="SUBSCRIPTION",
+                target_id=active.id,
+                metadata={"plan_name": plan.name, "price": float(plan.price)},
+            )
+            db.commit()
+            db.refresh(active)
+            return active
+
+        # ── Bukan upgrade (downgrade / paket sama) ────────────────────
+        # Langganan AKTIF tak boleh diganti diam-diam → minta batalkan dulu.
+        if active.status == SubscriptionStatus.active:
+            label = "Hosting" if category == "hosting" else "Storage"
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Anda sudah memiliki langganan {label} aktif. Batalkan terlebih dahulu sebelum memilih paket baru.",
+            )
+        # Langganan non-active (over_quota/suspended) → ganti record + cabut key
         active.status = SubscriptionStatus.terminated
         active.cancelled_at = now
-        # Key terikat ke langganan → langganan lama diganti, cabut key-nya
         _revoke_category_keys(db, current_user.id, category)
 
     # Buat record subscription BARU (riwayat tersimpan)

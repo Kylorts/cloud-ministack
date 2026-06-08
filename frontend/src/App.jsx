@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { isAuthenticated, getStoredUser } from './services/auth'
+import LandingPage from './pages/LandingPage'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
 import DashboardPage from './pages/DashboardPage'
@@ -19,10 +20,23 @@ function PrivateRoute({ children }) {
   return isAuthenticated() ? children : <Navigate to="/login" replace />
 }
 
-function RoleRoute() {
-  const user = getStoredUser()
+// Hanya admin. User biasa → dilempar ke dashboard. Belum login → ke login.
+function AdminRoute({ children }) {
   if (!isAuthenticated()) return <Navigate to="/login" replace />
-  return user?.role === 'admin'
+  return getStoredUser()?.role === 'admin'
+    ? children
+    : <Navigate to="/dashboard" replace />
+}
+
+// Halaman publik (login/register): kalau sudah login, arahkan ke beranda.
+function PublicRoute({ children }) {
+  return isAuthenticated() ? <Navigate to="/" replace /> : children
+}
+
+// Beranda: tamu → Landing Page; sudah login → dashboard/admin.
+function RootRoute() {
+  if (!isAuthenticated()) return <LandingPage />
+  return getStoredUser()?.role === 'admin'
     ? <Navigate to="/admin" replace />
     : <Navigate to="/dashboard" replace />
 }
@@ -30,15 +44,15 @@ function RoleRoute() {
 export default function App() {
   return (
     <Routes>
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/register" element={<RegisterPage />} />
+      <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
+      <Route path="/register" element={<PublicRoute><RegisterPage /></PublicRoute>} />
 
       <Route path="/dashboard" element={
         <PrivateRoute><DashboardPage /></PrivateRoute>
       } />
 
       <Route path="/admin" element={
-        <PrivateRoute><AdminDashboardPage /></PrivateRoute>
+        <AdminRoute><AdminDashboardPage /></AdminRoute>
       } />
 
       <Route path="/paket" element={
@@ -81,7 +95,10 @@ export default function App() {
         <PrivateRoute><KeamananPage /></PrivateRoute>
       } />
 
-      <Route path="/" element={<RoleRoute />} />
+      <Route path="/" element={<RootRoute />} />
+
+      {/* Catch-all: rute tak dikenal → arahkan ke beranda (login/dashboard), bukan halaman putih */}
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )
 }
