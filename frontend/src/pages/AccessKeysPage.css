@@ -58,8 +58,9 @@
 .secret-copy-btn:hover { background: #f3f4f6; }
 
 .secret-config-label { font-size: 12px; font-weight: 600; font-family: var(--font-ui); color: #6b7280; margin-bottom: 8px; }
-.secret-config-box { display: flex; align-items: center; gap: 10px; background: #062F28; border-radius: var(--radius-md); padding: 14px 16px; margin-bottom: 28px; }
+.secret-config-box { display: flex; align-items: flex-start; gap: 10px; background: #062F28; border-radius: var(--radius-md); padding: 14px 16px; margin-bottom: 28px; }
 .secret-config-box code { flex: 1; color: #9FE870; font-family: 'Courier New', monospace; font-size: 12px; word-break: break-all; }
+.secret-config-code { white-space: pre-wrap; line-height: 1.5; }
 .secret-config-copy { display: flex; align-items: center; gap: 6px; background: #fff; color: var(--color-dark); border-radius: var(--radius-sm); padding: 7px 12px; font-size: 12px; font-weight: 600; font-family: var(--font-ui); white-space: nowrap; }
 
 .secret-done-btn { width: 100%; background: var(--color-dark); color: #fff; padding: 14px 0; border-radius: var(--radius-md); font-size: 15px; font-weight: 600; font-family: var(--font-ui); }

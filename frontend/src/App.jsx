@@ -5,6 +5,17 @@ import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
 import DashboardPage from './pages/DashboardPage'
 import AdminDashboardPage from './pages/AdminDashboardPage'
+import AdminUsersPage from './pages/AdminUsersPage'
+import AdminUserDetailPage from './pages/AdminUserDetailPage'
+import AdminPlansPage from './pages/AdminPlansPage'
+import AdminSubscriptionsPage from './pages/AdminSubscriptionsPage'
+import AdminSubscriptionDetailPage from './pages/AdminSubscriptionDetailPage'
+import AdminTransactionsPage from './pages/AdminTransactionsPage'
+import AdminTransactionDetailPage from './pages/AdminTransactionDetailPage'
+import AdminMonitoringPage from './pages/AdminMonitoringPage'
+import AdminStorageBucketsPage from './pages/AdminStorageBucketsPage'
+import AdminBucketDetailPage from './pages/AdminBucketDetailPage'
+import AdminHostingSitesPage from './pages/AdminHostingSitesPage'
 import PaketPage from './pages/PaketPage'
 import LanggananPage from './pages/LanggananPage'
 import StoragePage from './pages/StoragePage'
@@ -53,6 +64,39 @@ export default function App() {
 
       <Route path="/admin" element={
         <AdminRoute><AdminDashboardPage /></AdminRoute>
+      } />
+      <Route path="/admin/pengguna" element={
+        <AdminRoute><AdminUsersPage /></AdminRoute>
+      } />
+      <Route path="/admin/pengguna/:id" element={
+        <AdminRoute><AdminUserDetailPage /></AdminRoute>
+      } />
+      <Route path="/admin/paket" element={
+        <AdminRoute><AdminPlansPage /></AdminRoute>
+      } />
+      <Route path="/admin/langganan" element={
+        <AdminRoute><AdminSubscriptionsPage /></AdminRoute>
+      } />
+      <Route path="/admin/langganan/:id" element={
+        <AdminRoute><AdminSubscriptionDetailPage /></AdminRoute>
+      } />
+      <Route path="/admin/transaksi" element={
+        <AdminRoute><AdminTransactionsPage /></AdminRoute>
+      } />
+      <Route path="/admin/transaksi/:id" element={
+        <AdminRoute><AdminTransactionDetailPage /></AdminRoute>
+      } />
+      <Route path="/admin/monitoring" element={
+        <AdminRoute><AdminMonitoringPage /></AdminRoute>
+      } />
+      <Route path="/admin/monitoring/storage" element={
+        <AdminRoute><AdminStorageBucketsPage /></AdminRoute>
+      } />
+      <Route path="/admin/monitoring/storage/:id" element={
+        <AdminRoute><AdminBucketDetailPage /></AdminRoute>
+      } />
+      <Route path="/admin/monitoring/hosting" element={
+        <AdminRoute><AdminHostingSitesPage /></AdminRoute>
       } />
 
       <Route path="/paket" element={

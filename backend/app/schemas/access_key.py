@@ -40,4 +40,4 @@ class AccessKeyResponse(BaseModel):
 class AccessKeyCreatedResponse(AccessKeyResponse):
     """Hanya saat pembuatan — berisi secret plaintext SEKALI."""
     secret_key: str
-    mc_command: str
+    usage_example: str

@@ -20,6 +20,7 @@ from app.schemas.access_key import (
 router = APIRouter(prefix="/access-keys", tags=["access-keys"])
 
 MINISTACK_PUBLIC_ENDPOINT = "http://localhost:4566"
+PROXY_PUBLIC_ENDPOINT = "http://localhost:8000/s3"
 ACCESS_STATUSES = [
     SubscriptionStatus.active,
     SubscriptionStatus.over_quota,
@@ -158,11 +159,30 @@ def create_key(
     db.commit()
     db.refresh(key)
 
+    if category == "storage":
+        usage_example = (
+            f"# List bucket Anda\n"
+            f"curl -H 'X-Access-Key-Id: {access_key_id}' -H 'X-Secret-Key: {secret}' \\\n"
+            f"  {PROXY_PUBLIC_ENDPOINT}/buckets\n\n"
+            f"# Upload file ke bucket (ganti <nama-bucket>)\n"
+            f"curl -X PUT -H 'X-Access-Key-Id: {access_key_id}' -H 'X-Secret-Key: {secret}' \\\n"
+            f"  --data-binary @berkas.txt \\\n"
+            f"  {PROXY_PUBLIC_ENDPOINT}/buckets/<nama-bucket>/objects/berkas.txt\n\n"
+            f"# Unduh file\n"
+            f"curl -H 'X-Access-Key-Id: {access_key_id}' -H 'X-Secret-Key: {secret}' \\\n"
+            f"  {PROXY_PUBLIC_ENDPOINT}/buckets/<nama-bucket>/objects/berkas.txt -o berkas.txt"
+        )
+    else:
+        usage_example = (
+            "# Kunci Hosting — endpoint proxy ber-auth untuk hosting belum tersedia.\n"
+            "# Simpan kunci ini untuk integrasi mendatang."
+        )
+
     base = AccessKeyResponse.model_validate(key).model_dump()
     return AccessKeyCreatedResponse(
         **base,
         secret_key=secret,
-        mc_command=f"mc alias set myministack {MINISTACK_PUBLIC_ENDPOINT} {access_key_id} {secret}",
+        usage_example=usage_example,
     )
 
 

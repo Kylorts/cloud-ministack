@@ -121,10 +121,10 @@ function SecretPanel({ created, onDone }) {
         </div>
       </div>
 
-      <div className="secret-config-label">Konfigurasi Cepat (MinIO Client)</div>
+      <div className="secret-config-label">Contoh Penggunaan (curl)</div>
       <div className="secret-config-box">
-        <code>{created.mc_command}</code>
-        <button className="secret-config-copy" onClick={() => copy(created.mc_command, 'mc')}>
+        <code className="secret-config-code">{created.usage_example}</code>
+        <button className="secret-config-copy" onClick={() => copy(created.usage_example, 'mc')}>
           <CopyIcon /> {copied === 'mc' ? 'Tersalin' : 'Salin'}
         </button>
       </div>
