@@ -16,6 +16,10 @@ import AdminMonitoringPage from './pages/AdminMonitoringPage'
 import AdminStorageBucketsPage from './pages/AdminStorageBucketsPage'
 import AdminBucketDetailPage from './pages/AdminBucketDetailPage'
 import AdminHostingSitesPage from './pages/AdminHostingSitesPage'
+import AdminSystemLogsPage from './pages/AdminSystemLogsPage'
+import AdminAuditLogPage from './pages/AdminAuditLogPage'
+import AdminAccessKeysGlobalPage from './pages/AdminAccessKeysGlobalPage'
+import AdminIamPage from './pages/AdminIamPage'
 import PaketPage from './pages/PaketPage'
 import LanggananPage from './pages/LanggananPage'
 import StoragePage from './pages/StoragePage'
@@ -98,6 +102,18 @@ export default function App() {
       <Route path="/admin/monitoring/hosting" element={
         <AdminRoute><AdminHostingSitesPage /></AdminRoute>
       } />
+      <Route path="/admin/logs" element={
+        <AdminRoute><AdminSystemLogsPage /></AdminRoute>
+      } />
+      <Route path="/admin/audit" element={
+        <AdminRoute><AdminAuditLogPage /></AdminRoute>
+      } />
+      <Route path="/admin/keys" element={
+        <AdminRoute><AdminAccessKeysGlobalPage /></AdminRoute>
+      } />
+      <Route path="/admin/iam" element={
+        <AdminRoute><AdminIamPage /></AdminRoute>
+      } />
 
       <Route path="/paket" element={
         <PrivateRoute><PaketPage /></PrivateRoute>
@@ -111,7 +127,7 @@ export default function App() {
         <PrivateRoute><StoragePage /></PrivateRoute>
       } />
 
-      <Route path="/storage/buckets/:id" element={
+      <Route path="/storage/buckets/:name" element={
         <PrivateRoute><BucketDetailPage /></PrivateRoute>
       } />
 
@@ -127,7 +143,7 @@ export default function App() {
         <PrivateRoute><HostingPage /></PrivateRoute>
       } />
 
-      <Route path="/hosting/sites/:id" element={
+      <Route path="/hosting/sites/:slug" element={
         <PrivateRoute><SiteDetailPage /></PrivateRoute>
       } />
 

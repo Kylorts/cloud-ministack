@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { parseUTC } from '../utils/datetime'
 import { useNavigate } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import PinPromptModal from '../components/PinPromptModal'
@@ -17,7 +18,7 @@ function formatBytes(bytes) {
 }
 function formatDate(dateStr) {
   if (!dateStr) return '-'
-  return new Date(dateStr).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+  return parseUTC(dateStr).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 function formatPrice(price) {
   return 'Rp ' + new Intl.NumberFormat('id-ID').format(price)
@@ -72,6 +73,13 @@ function SubBlock({ category, sub, storageUsage, hostingUsage, navigate, onCance
             <span className="lan-info-value">{formatPrice(sub.plan.price)} / bulan</span>
           </div>
         </div>
+
+        {sub.scheduled_plan_id && (
+          <div className="lan-scheduled">
+            ⏳ Downgrade ke <strong>{sub.scheduled_plan_name}</strong> dijadwalkan pada {formatDate(sub.current_period_end)}.
+            {' '}<a href={isStorage ? '/paket' : '/paket?kategori=hosting'}>Kelola di Pilih Paket</a>.
+          </div>
+        )}
 
         {CANCELLABLE.includes(sub.status) && (
           <button className="lan-cancel-btn" onClick={() => onCancel(category, sub)} disabled={cancelling}>

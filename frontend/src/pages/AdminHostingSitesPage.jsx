@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { parseUTC } from '../utils/datetime'
 import AdminNav from '../components/AdminNav'
 import { getAdminHostingSites } from '../services/admin'
 import './AdminDashboardPage.css'
@@ -6,7 +7,7 @@ import './AdminPages.css'
 
 function fmtWhen(s) {
   if (!s) return 'Belum deploy'
-  const d = new Date(s)
+  const d = parseUTC(s)
   const today = new Date()
   const sameDay = d.toDateString() === today.toDateString()
   if (sameDay) return `Hari ini, ${d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}`

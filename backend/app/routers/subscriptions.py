@@ -54,6 +54,42 @@ def _revoke_category_keys(db: Session, user_id: int, category: str) -> int:
     return len(keys)
 
 
+def _apply_scheduled(db: Session, sub: Subscription) -> bool:
+    """
+    Lazy-apply downgrade terjadwal: jika ada `scheduled_plan_id` dan periode
+    sudah lewat → terapkan paket baru, geser periode 30 hari, recalc + evaluate
+    (→ OVER_QUOTA bila perlu). Dipanggil di jalur baca. Return True bila diterapkan.
+    """
+    if not sub or not sub.scheduled_plan_id:
+        return False
+    if datetime.utcnow() < sub.current_period_end:
+        return False
+    new_plan = db.get(ServicePlan, sub.scheduled_plan_id)
+    if not new_plan:
+        sub.scheduled_plan_id = None
+        db.commit()
+        return False
+    old_name = sub.plan.name
+    now = datetime.utcnow()
+    sub.plan_id = new_plan.id
+    sub.scheduled_plan_id = None
+    sub.current_period_start = now
+    sub.current_period_end = now + timedelta(days=30)
+    if sub.category == "hosting":
+        usage_helper.recalculate_hosting(db, sub)
+    else:
+        usage_helper.recalculate(db, sub)
+    usage_helper.evaluate_quota_status(db, sub)
+    log_activity(
+        db, actor_user_id=sub.user_id, action="PACKAGE_DOWNGRADED",
+        description=f"Downgrade terjadwal diterapkan: {old_name} → {new_plan.name}",
+        target_type="SUBSCRIPTION", target_id=sub.id,
+    )
+    db.commit()
+    db.refresh(sub)
+    return True
+
+
 @router.get("/me", response_model=SubscriptionResponse)
 def get_my_subscription(
     category: str = Query("storage"),
@@ -66,6 +102,10 @@ def get_my_subscription(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Anda belum memiliki langganan aktif",
         )
+    _apply_scheduled(db, sub)  # terapkan downgrade terjadwal bila sudah waktunya
+    from app.core.usage import apply_grace_suspend
+
+    apply_grace_suspend(db, sub)  # auto-suspend bila grace period habis & masih over
     return sub
 
 
@@ -109,6 +149,7 @@ def subscribe(
         # naik seketika, over_quota & dormancy pulih otomatis.
         if is_upgrade:
             active.plan_id = plan.id
+            active.scheduled_plan_id = None  # upgrade membatalkan jadwal downgrade
             active.current_period_start = now
             active.current_period_end = now + timedelta(days=30)  # reset 30 hari
             if category == "hosting":
@@ -214,3 +255,60 @@ def cancel_subscription(
 
     db.commit()
     return {"message": "Langganan berhasil dibatalkan"}
+
+
+@router.post("/schedule-downgrade", status_code=status.HTTP_200_OK)
+def schedule_downgrade(
+    body: SubscribeRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Jadwalkan downgrade ke paket lebih murah; berlaku di akhir periode."""
+    plan = db.get(ServicePlan, body.plan_id)
+    if not plan or not plan.is_active:
+        raise HTTPException(status_code=404, detail="Paket tidak ditemukan")
+    category = plan.category.value if hasattr(plan.category, "value") else str(plan.category)
+
+    sub = _get_active_subscription(current_user.id, db, category=category)
+    if not sub:
+        raise HTTPException(status_code=404, detail="Tidak ada langganan aktif untuk dijadwalkan.")
+    if plan.id == sub.plan_id:
+        raise HTTPException(status_code=400, detail="Paket tujuan sama dengan paket saat ini.")
+    if float(plan.price) >= float(sub.plan.price):
+        raise HTTPException(
+            status_code=400,
+            detail="Penjadwalan hanya untuk downgrade (paket lebih murah). Untuk naik paket, gunakan Upgrade (langsung).",
+        )
+
+    sub.scheduled_plan_id = plan.id
+    log_activity(
+        db, actor_user_id=current_user.id, action="DOWNGRADE_SCHEDULED",
+        description=f"Menjadwalkan downgrade ke {plan.name} pada akhir periode",
+        target_type="SUBSCRIPTION", target_id=sub.id,
+    )
+    db.commit()
+    db.refresh(sub)
+    return {
+        "message": f"Downgrade ke {plan.name} dijadwalkan pada akhir periode.",
+        "effective_at": sub.current_period_end.isoformat(),
+    }
+
+
+@router.delete("/scheduled", status_code=status.HTTP_200_OK)
+def cancel_scheduled(
+    category: str = Query("storage"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Batalkan downgrade terjadwal."""
+    sub = _get_active_subscription(current_user.id, db, category=category)
+    if not sub or not sub.scheduled_plan_id:
+        raise HTTPException(status_code=404, detail="Tidak ada perubahan terjadwal.")
+    sub.scheduled_plan_id = None
+    log_activity(
+        db, actor_user_id=current_user.id, action="DOWNGRADE_SCHEDULE_CANCELLED",
+        description="Membatalkan jadwal downgrade",
+        target_type="SUBSCRIPTION", target_id=sub.id,
+    )
+    db.commit()
+    return {"message": "Jadwal downgrade dibatalkan."}

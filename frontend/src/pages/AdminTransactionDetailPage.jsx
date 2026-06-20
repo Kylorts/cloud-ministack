@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { parseUTC } from '../utils/datetime'
 import { useParams, useNavigate } from 'react-router-dom'
 import AdminNav from '../components/AdminNav'
 import { getAdminTransaction } from '../services/admin'
@@ -7,7 +8,7 @@ import './AdminPages.css'
 
 function fmtDateTime(s) {
   if (!s) return '-'
-  const d = new Date(s)
+  const d = parseUTC(s)
   return `${d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}, ${d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} WIB`
 }
 function rp(n) { return 'Rp ' + new Intl.NumberFormat('id-ID').format(n) }

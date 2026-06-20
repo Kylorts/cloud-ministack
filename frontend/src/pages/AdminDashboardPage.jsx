@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { parseUTC } from '../utils/datetime'
 import AdminNav from '../components/AdminNav'
 import { getAdminStats, getAdminResources, getAdminAccessKeys } from '../services/admin'
 import './AdminDashboardPage.css'
@@ -15,7 +16,7 @@ function formatBytes(bytes) {
 }
 function formatDate(s) {
   if (!s) return '-'
-  return new Date(s).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+  return parseUTC(s).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
 function ServerIcon() {

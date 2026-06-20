@@ -26,6 +26,10 @@ export const getAdminSubscriptions = (status = 'all') =>
 export const getAdminSubscription = (id) => api.get(`/admin/subscriptions/${id}`)
 export const adminChangePlan = (id, planId) =>
   api.post(`/admin/subscriptions/${id}/change-plan`, { plan_id: planId })
+export const adminFastForward = (id) => api.post(`/admin/subscriptions/${id}/fast-forward`)
+export const adminSuspendSub = (id) => api.post(`/admin/subscriptions/${id}/suspend`)
+export const adminUnsuspendSub = (id) => api.post(`/admin/subscriptions/${id}/unsuspend`)
+export const adminExpireGrace = (id) => api.post(`/admin/subscriptions/${id}/expire-grace`)
 
 // Fase E — transaksi (dummy/simulasi)
 export const getAdminTransactions = () => api.get('/admin/transactions')
@@ -36,3 +40,12 @@ export const getAdminMonitoring = () => api.get('/admin/monitoring')
 export const getAdminStorageBuckets = (q = '') => api.get('/admin/storage-buckets', { params: { q } })
 export const getAdminBucketDetail = (id) => api.get(`/admin/storage-buckets/${id}`)
 export const getAdminHostingSites = (q = '') => api.get('/admin/hosting-sites', { params: { q } })
+
+// Fase G — keamanan & log
+export const getAdminLogs = (params) => api.get('/admin/logs', { params })
+export const getAdminAudit = (params) => api.get('/admin/audit', { params })
+export const adminRevokeKey = (id) => api.post(`/admin/access-keys/${id}/revoke`)
+export const getIamPolicies = () => api.get('/admin/iam-policies')
+export const createIamPolicy = (data) => api.post('/admin/iam-policies', data)
+export const updateIamPolicy = (id, data) => api.put(`/admin/iam-policies/${id}`, data)
+export const deleteIamPolicy = (id) => api.delete(`/admin/iam-policies/${id}`)

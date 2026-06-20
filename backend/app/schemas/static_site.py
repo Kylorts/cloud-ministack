@@ -1,9 +1,23 @@
+import re
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 
 class SiteCreateRequest(BaseModel):
     site_name: str
+
+    @field_validator("site_name")
+    @classmethod
+    def validate_site_name(cls, v: str) -> str:
+        v = v.strip()
+        if len(v) < 3 or len(v) > 63:
+            raise ValueError("Nama situs harus antara 3–63 karakter")
+        if not re.match(r"^[a-z0-9][a-z0-9\-]*[a-z0-9]$", v):
+            raise ValueError(
+                "Nama situs hanya boleh huruf kecil, angka, dan tanda hubung (-), "
+                "tidak boleh diawali/diakhiri tanda hubung"
+            )
+        return v
 
 
 class DeploymentResponse(BaseModel):

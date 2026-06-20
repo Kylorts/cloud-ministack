@@ -232,10 +232,12 @@ def hosting_usage(
     sub = _get_active_hosting_sub(current_user.id, db)
     counter = usage_helper.get_or_create_counter(db, sub)
     usage_helper.evaluate_quota_status(db, sub)  # lazy-check: pulihkan/aktifkan over_quota
+    usage_helper.apply_grace_suspend(db, sub)  # auto-suspend bila grace habis & masih over
     db.commit()
     build_limit = sub.plan.storage_limit_bytes
     return {
         "subscription_status": sub.status.value if hasattr(sub.status, "value") else sub.status,
+        "grace_until": sub.grace_until,
         "site_count": counter.static_site_count,
         "site_limit": sub.plan.static_site_limit,
         "build_used_bytes": counter.storage_used_bytes,
@@ -313,15 +315,15 @@ def create_site(
     return _site_to_response(site, db)
 
 
-@router.get("/sites/{site_id}", response_model=SiteDetailResponse)
+@router.get("/sites/{slug}", response_model=SiteDetailResponse)
 def get_site(
-    site_id: int,
+    slug: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     sub = _get_active_hosting_sub(current_user.id, db)
     site = db.query(StaticSite).filter(
-        StaticSite.id == site_id,
+        StaticSite.slug == slug,
         StaticSite.user_id == current_user.id,
         StaticSite.status != SiteStatus.deleted,
     ).first()
@@ -349,9 +351,9 @@ def get_site(
     return detail
 
 
-@router.post("/sites/{site_id}/deploy", response_model=DeploymentResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/sites/{slug}/deploy", response_model=DeploymentResponse, status_code=status.HTTP_201_CREATED)
 async def deploy_site(
-    site_id: int,
+    slug: str,
     file: UploadFile = File(...),
     prefix: str = Form(""),
     current_user: User = Depends(get_current_user),
@@ -360,7 +362,7 @@ async def deploy_site(
     sub = _get_active_hosting_sub(current_user.id, db)
     _require_can_add(sub)
     site = db.query(StaticSite).filter(
-        StaticSite.id == site_id,
+        StaticSite.slug == slug,
         StaticSite.user_id == current_user.id,
         StaticSite.status == SiteStatus.active,
     ).first()
@@ -518,16 +520,16 @@ async def deploy_site(
     return dr
 
 
-@router.post("/sites/{site_id}/deployments/{deployment_id}/rollback", response_model=DeploymentResponse)
+@router.post("/sites/{slug}/deployments/{deployment_id}/rollback", response_model=DeploymentResponse)
 def rollback_deployment(
-    site_id: int,
+    slug: str,
     deployment_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     sub = _get_active_hosting_sub(current_user.id, db)
     site = db.query(StaticSite).filter(
-        StaticSite.id == site_id,
+        StaticSite.slug == slug,
         StaticSite.user_id == current_user.id,
         StaticSite.status == SiteStatus.active,
     ).first()
@@ -564,16 +566,16 @@ def rollback_deployment(
     return dr
 
 
-@router.delete("/sites/{site_id}/deployments/{deployment_id}", status_code=status.HTTP_200_OK)
+@router.delete("/sites/{slug}/deployments/{deployment_id}", status_code=status.HTTP_200_OK)
 def delete_deployment(
-    site_id: int,
+    slug: str,
     deployment_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     sub = _get_active_hosting_sub(current_user.id, db)
     site = db.query(StaticSite).filter(
-        StaticSite.id == site_id,
+        StaticSite.slug == slug,
         StaticSite.user_id == current_user.id,
         StaticSite.status == SiteStatus.active,
     ).first()
@@ -617,9 +619,9 @@ def delete_deployment(
     return {"message": "Deployment berhasil dihapus"}
 
 
-@router.delete("/sites/{site_id}", status_code=status.HTTP_200_OK)
+@router.delete("/sites/{slug}", status_code=status.HTTP_200_OK)
 def delete_site(
-    site_id: int,
+    slug: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
     x_transaction_pin: str | None = Header(default=None, alias="X-Transaction-PIN"),
@@ -627,9 +629,9 @@ def delete_site(
     require_pin(current_user, x_transaction_pin)
     sub = _get_active_hosting_sub(current_user.id, db)
     site = db.query(StaticSite).filter(
-        StaticSite.id == site_id,
+        StaticSite.slug == slug,
         StaticSite.user_id == current_user.id,
-        StaticSite.status == SiteStatus.active,
+        StaticSite.status.in_([SiteStatus.active, SiteStatus.suspended]),
     ).first()
     if not site:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Situs tidak ditemukan")
@@ -656,3 +658,60 @@ def delete_site(
     )
     db.commit()
     return {"message": "Situs berhasil dihapus"}
+
+
+@router.post("/sites/{slug}/deactivate", response_model=SiteResponse)
+def deactivate_site(
+    slug: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Nonaktifkan situs aktif → offline (status suspended). Bisa diaktifkan lagi."""
+    _get_active_hosting_sub(current_user.id, db)
+    site = db.query(StaticSite).filter(
+        StaticSite.slug == slug,
+        StaticSite.user_id == current_user.id,
+        StaticSite.status == SiteStatus.active,
+    ).first()
+    if not site:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Situs aktif tidak ditemukan")
+
+    site.status = SiteStatus.suspended
+    site.suspended_at = datetime.utcnow()
+    log_activity(
+        db, actor_user_id=current_user.id, action="STATIC_SITE_DEACTIVATED",
+        description=f"Menonaktifkan situs '{site.site_name}'",
+        target_type="SITE", target_id=site.id,
+    )
+    db.commit()
+    db.refresh(site)
+    return _site_to_response(site, db, dormant=False)
+
+
+@router.post("/sites/{slug}/activate", response_model=SiteResponse)
+def activate_site(
+    slug: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Aktifkan kembali situs yang dinonaktifkan."""
+    sub = _get_active_hosting_sub(current_user.id, db)
+    site = db.query(StaticSite).filter(
+        StaticSite.slug == slug,
+        StaticSite.user_id == current_user.id,
+        StaticSite.status == SiteStatus.suspended,
+    ).first()
+    if not site:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Situs nonaktif tidak ditemukan")
+
+    site.status = SiteStatus.active
+    site.suspended_at = None
+    log_activity(
+        db, actor_user_id=current_user.id, action="STATIC_SITE_ACTIVATED",
+        description=f"Mengaktifkan kembali situs '{site.site_name}'",
+        target_type="SITE", target_id=site.id,
+    )
+    db.commit()
+    db.refresh(site)
+    is_dormant = site.id in _dormant_site_ids(db, current_user.id, sub.plan.static_site_limit)
+    return _site_to_response(site, db, dormant=is_dormant)

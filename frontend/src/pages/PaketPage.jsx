@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
+import { parseUTC } from '../utils/datetime'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import { getPlans } from '../services/plans'
-import { getMySubscription, subscribe } from '../services/subscriptions'
+import { getMySubscription, subscribe, scheduleDowngrade, cancelScheduled } from '../services/subscriptions'
 import './PaketPage.css'
 
 function CheckIcon() {
@@ -27,6 +28,11 @@ function formatPrice(price) {
   return 'Rp ' + new Intl.NumberFormat('id-ID').format(price)
 }
 
+function formatDate(s) {
+  if (!s) return '-'
+  return parseUTC(s).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
 export default function PaketPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [category, setCategory] = useState(searchParams.get('kategori') === 'hosting' ? 'hosting' : 'storage')
@@ -35,36 +41,49 @@ export default function PaketPage() {
   const [loading, setLoading] = useState(true)
   const [subscribing, setSubscribing] = useState(null)
   const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
   const navigate = useNavigate()
 
-  useEffect(() => {
+  function reload() {
     setLoading(true)
-    Promise.all([
+    return Promise.all([
       getPlans(category),
       getMySubscription(category).catch(() => ({ data: null })),
     ]).then(([plansRes, subRes]) => {
       setPlans(plansRes.data)
       setSubscription(subRes.data)
     }).finally(() => setLoading(false))
-  }, [category])
+  }
+
+  useEffect(() => { reload() }, [category])
 
   function switchCategory(cat) {
     setCategory(cat)
     setSearchParams({ kategori: cat })
-    setError('')
+    setError(''); setNotice('')
   }
 
-  async function handleSubscribe(planId) {
-    setSubscribing(planId)
-    setError('')
+  async function handleAction(plan, type) {
+    setSubscribing(plan.id); setError(''); setNotice('')
     try {
-      await subscribe(planId)
-      navigate(category === 'hosting' ? '/hosting' : '/langganan')
+      if (type === 'downgrade') {
+        const res = await scheduleDowngrade(plan.id)
+        setNotice(res.data?.message || 'Downgrade dijadwalkan.')
+        await reload()
+      } else {
+        await subscribe(plan.id)
+        navigate(category === 'hosting' ? '/hosting' : '/langganan')
+      }
     } catch (err) {
-      setError(err.response?.data?.detail || 'Gagal berlangganan')
+      setError(err.response?.data?.detail || 'Gagal memproses')
     } finally {
       setSubscribing(null)
     }
+  }
+
+  async function handleCancelScheduled() {
+    try { await cancelScheduled(category); setNotice('Jadwal downgrade dibatalkan.'); await reload() }
+    catch (err) { setError(err.response?.data?.detail || 'Gagal membatalkan jadwal') }
   }
 
   const ACTIVE_LIKE = ['active', 'over_quota', 'suspended', 'past_due', 'pending_payment']
@@ -124,6 +143,14 @@ export default function PaketPage() {
         </div>
 
         {error && <div className="paket-error">{error}</div>}
+        {notice && <div className="paket-notice">{notice}</div>}
+        {subscription?.scheduled_plan_id && (
+          <div className="paket-scheduled">
+            ⏳ <strong>Downgrade ke {subscription.scheduled_plan_name}</strong> dijadwalkan berlaku pada{' '}
+            <strong>{formatDate(subscription.current_period_end)}</strong>. Anda tetap di paket sekarang sampai itu.
+            <button className="paket-scheduled-cancel" onClick={handleCancelScheduled}>Batalkan</button>
+          </div>
+        )}
 
         {loading ? (
           <div className="paket-loading-inline">Memuat paket...</div>
@@ -132,9 +159,12 @@ export default function PaketPage() {
             {plans.map((plan, index) => {
               const action = getPlanAction(plan)
               const isCurrent = action.type === 'current'
+              const isScheduled = subscription?.scheduled_plan_id === plan.id
+              const disabled = isCurrent || isScheduled || subscribing === plan.id
               return (
                 <div key={plan.id} className={`plan-card ${isCurrent ? 'plan-card--active' : ''}`}>
                   {isCurrent && <div className="plan-ribbon">AKTIF</div>}
+                  {isScheduled && <div className="plan-ribbon plan-ribbon--scheduled">TERJADWAL</div>}
                   <div className="plan-badge">{getPlanBadge(index)}</div>
                   <h2 className="plan-name">{plan.name}</h2>
                   <div className="plan-price">
@@ -148,10 +178,12 @@ export default function PaketPage() {
                   </ul>
                   <button
                     className={`plan-btn plan-btn--${action.type}`}
-                    disabled={isCurrent || subscribing === plan.id}
-                    onClick={() => !isCurrent && handleSubscribe(plan.id)}
+                    disabled={disabled}
+                    onClick={() => !disabled && handleAction(plan, action.type)}
                   >
-                    {subscribing === plan.id ? 'Memproses...' : action.label}
+                    {subscribing === plan.id ? 'Memproses...'
+                      : isScheduled ? 'Terjadwal'
+                      : action.label}
                   </button>
                 </div>
               )

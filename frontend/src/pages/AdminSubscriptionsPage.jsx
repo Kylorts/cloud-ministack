@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { parseUTC } from '../utils/datetime'
 import { useNavigate } from 'react-router-dom'
 import AdminNav from '../components/AdminNav'
 import { getAdminSubscriptions } from '../services/admin'
@@ -7,7 +8,7 @@ import './AdminPages.css'
 
 function fmtDate(s) {
   if (!s) return '-'
-  return new Date(s).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+  return parseUTC(s).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 const TABS = [
   { key: 'all', label: 'Semua' },

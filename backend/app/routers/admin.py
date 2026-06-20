@@ -1,4 +1,5 @@
-from datetime import datetime
+import json
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func
@@ -10,6 +11,7 @@ from app.core.deps import get_admin_user, get_db
 from app.database import get_db as _get_db  # noqa
 from app.models.access_key import AccessKey, KeyStatus
 from app.models.activity_log import ActivityLog, ActorType
+from app.models.iam_policy import IamPolicy, PolicyType
 from app.models.plan import PlanCategory, ServicePlan
 from app.models.static_site import SiteStatus, StaticSite
 from app.models.static_site_deployment import StaticSiteDeployment
@@ -19,11 +21,12 @@ from app.models.subscription import ACTIVE_LIKE_STATUSES, Subscription, Subscrip
 from app.models.usage_counter import UsageCounter
 from app.models.user import User, UserRole, UserStatus
 from app.schemas.admin import (
-    AdminAccessKeyItem, AdminActivityItem, AdminBucketDetail, AdminBucketObject, AdminBucketRow,
-    AdminMonitoring, AdminPlanChange, AdminPlanItem, AdminPlanWrite, AdminResourceItem,
-    AdminSiteRow, AdminSubscriptionDetail, AdminSubscriptionItem, AdminTopUser,
-    AdminTransactionDetail, AdminTransactionItem, AdminUserDetail, AdminUserItem,
-    AdminUserResource, ChangePlanRequest, StatsResponse, StatusUpdateRequest,
+    AdminAccessKeyItem, AdminActivityItem, AdminAuditItem, AdminBucketDetail, AdminBucketObject,
+    AdminBucketRow, AdminLogItem, AdminLogPage, AdminMonitoring, AdminPlanChange, AdminPlanItem,
+    AdminPlanWrite, AdminResourceItem, AdminSiteRow, AdminSubscriptionDetail, AdminSubscriptionItem,
+    AdminTopUser, AdminTransactionDetail, AdminTransactionItem, AdminUserDetail, AdminUserItem,
+    AdminUserResource, ChangePlanRequest, IamPolicyItem, IamPolicyWrite, StatsResponse,
+    StatusUpdateRequest,
 )
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -136,7 +139,11 @@ def list_access_keys(db: Session = Depends(get_db), _: User = Depends(get_admin_
             id=k.id, access_key_id=k.access_key_id,
             owner_name=owner.name if owner else "-",
             status=k.status.value if hasattr(k.status, "value") else k.status,
-            category=k.category, created_at=k.created_at,
+            category=k.category,
+            permission=k.permission.value if hasattr(k.permission, "value") else k.permission,
+            policy_name=k.policy_name,
+            last_used_at=k.last_used_at,
+            created_at=k.created_at,
         ))
     return out
 
@@ -357,7 +364,8 @@ def list_subscriptions(status_f: str = Query("all", alias="status"),
         out.append(AdminSubscriptionItem(
             id=s.id, client_name=owner.name if owner else "-", plan_name=s.plan.name,
             category=s.category, status=s.status.value,
-            current_period_end=s.current_period_end, scheduled_change=None,
+            current_period_end=s.current_period_end,
+            scheduled_change=(f"Downgrade → {s.scheduled_plan.name}" if s.scheduled_plan_id else None),
         ))
     return out
 
@@ -386,12 +394,93 @@ def subscription_detail(sub_id: int, db: Session = Depends(get_db), _: User = De
         client_email=owner.email if owner else "-",
         plan_name=s.plan.name, category=s.category, status=s.status.value, price=float(s.plan.price),
         current_period_start=s.current_period_start, current_period_end=s.current_period_end,
+        grace_until=s.grace_until, suspended_at=s.suspended_at,
         storage_used_bytes=counter.storage_used_bytes if counter else 0,
         storage_limit_bytes=s.plan.storage_limit_bytes,
         bandwidth_used_bytes=counter.bandwidth_used_bytes if counter else 0,
         bandwidth_limit_bytes=s.plan.bandwidth_limit_bytes,
         history=history,
     )
+
+
+@router.post("/subscriptions/{sub_id}/fast-forward", status_code=200)
+def admin_fast_forward(sub_id: int, db: Session = Depends(get_db), admin: User = Depends(get_admin_user)):
+    """DEMO: majukan periode ke masa lalu lalu terapkan downgrade terjadwal (jika ada)."""
+    from app.routers.subscriptions import _apply_scheduled
+    s = db.get(Subscription, sub_id)
+    if not s:
+        raise HTTPException(status_code=404, detail="Langganan tidak ditemukan")
+    s.current_period_end = datetime.utcnow() - timedelta(minutes=1)
+    db.commit()
+    applied = _apply_scheduled(db, s)
+    return {
+        "message": "Downgrade terjadwal diterapkan." if applied else "Periode dimajukan (tak ada jadwal downgrade).",
+        "applied": applied,
+    }
+
+
+@router.post("/subscriptions/{sub_id}/suspend", status_code=200)
+def admin_suspend_subscription(sub_id: int, db: Session = Depends(get_db), admin: User = Depends(get_admin_user)):
+    """Suspend langganan klien secara manual (override admin)."""
+    s = db.get(Subscription, sub_id)
+    if not s:
+        raise HTTPException(status_code=404, detail="Langganan tidak ditemukan")
+    if s.status in (SubscriptionStatus.cancelled, SubscriptionStatus.expired, SubscriptionStatus.terminated):
+        raise HTTPException(status_code=400, detail="Langganan sudah berakhir, tidak bisa di-suspend.")
+    if s.status == SubscriptionStatus.suspended:
+        raise HTTPException(status_code=400, detail="Langganan sudah dalam status suspended.")
+    s.status = SubscriptionStatus.suspended
+    s.suspended_at = datetime.utcnow()
+    log_activity(
+        db, actor_user_id=admin.id, actor_type=ActorType.admin,
+        action="SUBSCRIPTION_SUSPENDED",
+        description="Admin men-suspend langganan secara manual.",
+        target_type="SUBSCRIPTION", target_id=s.id,
+    )
+    db.commit()
+    return {"message": "Langganan disuspend."}
+
+
+@router.post("/subscriptions/{sub_id}/unsuspend", status_code=200)
+def admin_unsuspend_subscription(sub_id: int, db: Session = Depends(get_db), admin: User = Depends(get_admin_user)):
+    """Pulihkan langganan dari status suspended. Status final dihitung ulang (active/over_quota)."""
+    s = db.get(Subscription, sub_id)
+    if not s:
+        raise HTTPException(status_code=404, detail="Langganan tidak ditemukan")
+    if s.status != SubscriptionStatus.suspended:
+        raise HTTPException(status_code=400, detail="Langganan tidak sedang suspended.")
+    s.status = SubscriptionStatus.active
+    s.suspended_at = None
+    s.over_quota_since = None
+    s.grace_until = None
+    # Hitung ulang: jika masih melebihi limit, kembali over_quota dengan grace baru.
+    usage_helper.evaluate_quota_status(db, s)
+    log_activity(
+        db, actor_user_id=admin.id, actor_type=ActorType.admin,
+        action="SUBSCRIPTION_UNSUSPENDED",
+        description="Admin memulihkan langganan dari status suspended.",
+        target_type="SUBSCRIPTION", target_id=s.id,
+    )
+    db.commit()
+    return {"message": f"Langganan dipulihkan (status: {s.status.value})."}
+
+
+@router.post("/subscriptions/{sub_id}/expire-grace", status_code=200)
+def admin_expire_grace(sub_id: int, db: Session = Depends(get_db), admin: User = Depends(get_admin_user)):
+    """DEMO: habiskan grace period sekarang lalu jalankan auto-suspend (untuk uji tanpa nunggu 7 hari)."""
+    s = db.get(Subscription, sub_id)
+    if not s:
+        raise HTTPException(status_code=404, detail="Langganan tidak ditemukan")
+    if s.status != SubscriptionStatus.over_quota:
+        raise HTTPException(status_code=400, detail="Langganan tidak sedang OVER_QUOTA, tak ada grace untuk dihabiskan.")
+    s.grace_until = datetime.utcnow() - timedelta(minutes=1)
+    db.commit()
+    suspended = usage_helper.apply_grace_suspend(db, s)
+    return {
+        "message": "Grace habis → langganan disuspend otomatis." if suspended
+                   else "Grace dihabiskan, tapi pemakaian sudah di bawah limit (tidak disuspend).",
+        "suspended": suspended,
+    }
 
 
 @router.post("/subscriptions/{sub_id}/change-plan", status_code=200)
@@ -407,7 +496,7 @@ def admin_change_plan(sub_id: int, body: ChangePlanRequest,
         raise HTTPException(status_code=400, detail="Paket harus kategori yang sama dengan langganan.")
 
     old_name = s.plan.name
-    s.plan_id = plan.id
+    s.plan = plan  # set relationship (bukan hanya plan_id) agar evaluate_quota_status pakai plan baru
     if s.category == "hosting":
         usage_helper.recalculate_hosting(db, s)
     else:
@@ -592,3 +681,179 @@ def all_sites(q: str = Query("", alias="q"),
             url=f"{MON_BASE_URL}/sites/{s.slug}/", last_deployed_at=last_dep, status="active",
         ))
     return out
+
+
+# ════════ Fase G: Keamanan & Log Sistem ════════
+
+import re as _re
+
+
+def _log_target(a: ActivityLog) -> str:
+    m = _re.search(r"'([^']+)'", a.description or "")
+    if m:
+        return m[1]
+    em = _re.search(r"[\w.+-]+@[\w-]+\.[\w.-]+", a.description or "")
+    if em:
+        return em.group(0)
+    if a.target_type:
+        return f"{a.target_type} #{a.target_id}" if a.target_id else a.target_type
+    return "-"
+
+
+_TYPE_PREFIX = {
+    "storage": ("FILE_", "BUCKET_"),
+    "hosting": ("STATIC_SITE",),
+    "key": ("ACCESS_KEY",),
+    "security": ("PIN_", "PASSWORD_"),
+    "account": ("USER_LOGIN", "USER_REGISTERED", "USER_STATUS"),
+    "billing": ("PACKAGE_", "SUBSCRIPTION_"),
+    "admin": ("PLAN_", "ADMIN_"),
+}
+
+
+@router.post("/access-keys/{key_id}/revoke", status_code=200)
+def admin_revoke_key(key_id: int, db: Session = Depends(get_db), admin: User = Depends(get_admin_user)):
+    k = db.get(AccessKey, key_id)
+    if not k:
+        raise HTTPException(status_code=404, detail="Access key tidak ditemukan")
+    if k.status == KeyStatus.revoked:
+        raise HTTPException(status_code=400, detail="Kunci sudah dicabut")
+    k.status = KeyStatus.revoked
+    k.revoked_at = datetime.utcnow()
+    log_activity(
+        db, actor_user_id=admin.id, actor_type=ActorType.admin,
+        action="ADMIN_KEY_REVOKED",
+        description=f"Admin mencabut access key {k.access_key_id}",
+        target_type="ACCESS_KEY", target_id=k.id,
+    )
+    db.commit()
+    return {"message": "Access key dicabut."}
+
+
+@router.get("/logs", response_model=AdminLogPage)
+def system_logs(actor: str = Query("all"), type_f: str = Query("all", alias="type"),
+                q: str = Query(""), page: int = Query(1), page_size: int = Query(15),
+                db: Session = Depends(get_db), _: User = Depends(get_admin_user)):
+    query = db.query(ActivityLog)
+    if actor in ("user", "admin", "system", "midtrans"):
+        query = query.filter(ActivityLog.actor_type == ActorType(actor))
+    if type_f in _TYPE_PREFIX:
+        prefixes = _TYPE_PREFIX[type_f]
+        conds = [ActivityLog.action.like(f"{p}%") for p in prefixes]
+        from sqlalchemy import or_
+        query = query.filter(or_(*conds))
+    if q:
+        query = query.filter(ActivityLog.description.like(f"%{q}%"))
+
+    total = query.count()
+    rows = (
+        query.order_by(ActivityLog.created_at.desc())
+        .offset(max(page - 1, 0) * page_size).limit(page_size).all()
+    )
+    items = []
+    for a in rows:
+        if a.actor_type == ActorType.user and a.actor_user_id:
+            owner = db.get(User, a.actor_user_id)
+            actor_name = owner.name if owner else "User"
+        else:
+            actor_name = a.actor_type.value.capitalize()
+        items.append(AdminLogItem(
+            id=a.id, actor_type=a.actor_type.value, actor_name=actor_name,
+            action=a.action, target=_log_target(a), ip_address=a.ip_address,
+            created_at=a.created_at,
+        ))
+    return AdminLogPage(items=items, total=total)
+
+
+@router.get("/audit", response_model=list[AdminAuditItem])
+def admin_audit(q: str = Query(""), page: int = Query(1), page_size: int = Query(30),
+                db: Session = Depends(get_db), _: User = Depends(get_admin_user)):
+    query = db.query(ActivityLog).filter(ActivityLog.actor_type == ActorType.admin)
+    if q:
+        query = query.filter(ActivityLog.description.like(f"%{q}%"))
+    rows = (
+        query.order_by(ActivityLog.created_at.desc())
+        .offset(max(page - 1, 0) * page_size).limit(page_size).all()
+    )
+    out = []
+    for a in rows:
+        admin_user = db.get(User, a.actor_user_id) if a.actor_user_id else None
+        out.append(AdminAuditItem(
+            id=a.id,
+            admin_name=admin_user.name if admin_user else "Admin",
+            affected=_log_target(a),
+            action=a.action,
+            note=a.description,
+            created_at=a.created_at,
+        ))
+    return out
+
+
+# ── IAM Policy (manajemen saja, belum di-enforce) ──
+
+def _policy_item(p: IamPolicy) -> IamPolicyItem:
+    return IamPolicyItem(
+        id=p.id, name=p.name, description=p.description,
+        policy_type=p.policy_type.value if hasattr(p.policy_type, "value") else p.policy_type,
+        document=p.document, created_by=p.created_by, created_at=p.created_at,
+    )
+
+
+def _validate_json(doc: str):
+    try:
+        json.loads(doc)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Dokumen policy harus JSON valid.")
+
+
+@router.get("/iam-policies", response_model=list[IamPolicyItem])
+def list_policies(db: Session = Depends(get_db), _: User = Depends(get_admin_user)):
+    pols = db.query(IamPolicy).order_by(IamPolicy.created_at.asc()).all()
+    return [_policy_item(p) for p in pols]
+
+
+@router.post("/iam-policies", response_model=IamPolicyItem, status_code=201)
+def create_policy(body: IamPolicyWrite, db: Session = Depends(get_db), admin: User = Depends(get_admin_user)):
+    _validate_json(body.document)
+    p = IamPolicy(
+        name=body.name.strip(), description=(body.description or None),
+        policy_type=PolicyType.custom, document=body.document, created_by=admin.name,
+    )
+    db.add(p)
+    log_activity(db, actor_user_id=admin.id, actor_type=ActorType.admin,
+                 action="IAM_POLICY_CREATED", description=f"Admin membuat policy {body.name}")
+    db.commit(); db.refresh(p)
+    return _policy_item(p)
+
+
+@router.put("/iam-policies/{policy_id}", response_model=IamPolicyItem)
+def update_policy(policy_id: int, body: IamPolicyWrite,
+                  db: Session = Depends(get_db), admin: User = Depends(get_admin_user)):
+    p = db.get(IamPolicy, policy_id)
+    if not p:
+        raise HTTPException(status_code=404, detail="Policy tidak ditemukan")
+    if p.policy_type == PolicyType.system:
+        raise HTTPException(status_code=400, detail="Policy System tidak bisa diubah.")
+    _validate_json(body.document)
+    p.name = body.name.strip()
+    p.description = body.description or None
+    p.document = body.document
+    log_activity(db, actor_user_id=admin.id, actor_type=ActorType.admin,
+                 action="IAM_POLICY_UPDATED", description=f"Admin mengubah policy {p.name}")
+    db.commit(); db.refresh(p)
+    return _policy_item(p)
+
+
+@router.delete("/iam-policies/{policy_id}", status_code=200)
+def delete_policy(policy_id: int, db: Session = Depends(get_db), admin: User = Depends(get_admin_user)):
+    p = db.get(IamPolicy, policy_id)
+    if not p:
+        raise HTTPException(status_code=404, detail="Policy tidak ditemukan")
+    if p.policy_type == PolicyType.system:
+        raise HTTPException(status_code=400, detail="Policy System tidak bisa dihapus.")
+    name = p.name
+    db.delete(p)
+    log_activity(db, actor_user_id=admin.id, actor_type=ActorType.admin,
+                 action="IAM_POLICY_DELETED", description=f"Admin menghapus policy {name}")
+    db.commit()
+    return {"message": "Policy dihapus."}

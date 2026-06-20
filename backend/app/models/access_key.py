@@ -38,6 +38,11 @@ class AccessKey(Base):
     status: Mapped[KeyStatus] = mapped_column(
         Enum(KeyStatus), nullable=False, default=KeyStatus.active
     )
+    # IAM policy yang dilekatkan (opsional). Bila ada, policy ini yang menentukan
+    # otorisasi di proxy /s3 (menggantikan enum permission).
+    policy_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("iam_policies.id", ondelete="SET NULL"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, server_default=func.now()
     )
@@ -46,3 +51,8 @@ class AccessKey(Base):
 
     user: Mapped["User"] = relationship("User")
     subscription: Mapped["Subscription"] = relationship("Subscription")
+    policy: Mapped["IamPolicy | None"] = relationship("IamPolicy")
+
+    @property
+    def policy_name(self) -> str | None:
+        return self.policy.name if self.policy else None

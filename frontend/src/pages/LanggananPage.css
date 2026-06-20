@@ -318,3 +318,6 @@
 .lan-cancel-text { font-size: 14px; font-family: var(--font-ui); color: var(--color-dark); margin-bottom: 12px; }
 .lan-cancel-list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 7px; }
 .lan-cancel-list li { font-size: 13px; font-family: var(--font-ui); color: #4b5563; line-height: 1.5; }
+
+.lan-scheduled { background:#fffbeb; border:1px solid #fde68a; color:#92400e; border-radius: var(--radius-sm); padding: 10px 12px; font-size: 13px; font-family: var(--font-ui); margin-top: 14px; line-height: 1.5; }
+.lan-scheduled a { color:#92400e; text-decoration: underline; }

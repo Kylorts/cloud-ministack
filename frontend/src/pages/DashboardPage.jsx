@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { parseUTC } from '../utils/datetime'
 import { useNavigate, Link } from 'react-router-dom'
 import { logout, getStoredUser } from '../services/auth'
 import Sidebar from '../components/Sidebar'
@@ -311,7 +312,7 @@ export default function DashboardPage() {
               <div>
                 <p className="stat-label">Paket Langganan</p>
                 <p className="stat-sublabel">
-                  {subscription ? `Aktif hingga ${new Date(subscription.current_period_end).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}` : 'Pilih paket untuk mulai'}
+                  {subscription ? `Aktif hingga ${parseUTC(subscription.current_period_end).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}` : 'Pilih paket untuk mulai'}
                 </p>
               </div>
               <span className="stat-icon"><PackageIcon /></span>
@@ -433,7 +434,7 @@ export default function DashboardPage() {
                         </td>
                         <td className="util-cell">{b.status === 'active' ? '● Aktif' : b.status}</td>
                         <td>
-                          <button className="action-btn" onClick={() => navigate(`/storage/buckets/${b.id}`)}>
+                          <button className="action-btn" onClick={() => navigate(`/storage/buckets/${b.display_name}`)}>
                             Buka
                           </button>
                         </td>
@@ -495,7 +496,7 @@ export default function DashboardPage() {
                         </td>
                         <td className="util-cell">{s.status === 'active' ? '● Aktif' : s.status}</td>
                         <td>
-                          <button className="action-btn" onClick={() => navigate(`/hosting/sites/${s.id}`)}>Kelola</button>
+                          <button className="action-btn" onClick={() => navigate(`/hosting/sites/${s.slug}`)}>Kelola</button>
                         </td>
                       </tr>
                     ))

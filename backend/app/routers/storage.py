@@ -12,6 +12,7 @@ from app.core.ministack import (
     create_bucket, delete_bucket,
     upload_object, download_object, delete_object,
     get_s3_client, _ensure_bucket_exists,
+    ensure_object_exists, OBJECT_PLACEHOLDER,
 )
 from app.core import usage as usage_helper
 from app.core.activity import log_activity
@@ -111,11 +112,13 @@ def get_storage_usage(
     sub = _get_active_subscription(current_user.id, db)
     counter = usage_helper.get_or_create_counter(db, sub)
     usage_helper.evaluate_quota_status(db, sub)  # lazy-check: pulihkan/aktifkan over_quota
+    usage_helper.apply_grace_suspend(db, sub)  # auto-suspend bila grace habis & masih over
     db.commit()
 
     used_bytes = counter.storage_used_bytes
     return {
         "subscription_status": sub.status.value if hasattr(sub.status, "value") else sub.status,
+        "grace_until": sub.grace_until,
         "storage_used_bytes": used_bytes,
         "storage_limit_bytes": sub.plan.storage_limit_bytes,
         "storage_percent": round((used_bytes / sub.plan.storage_limit_bytes) * 100, 1) if sub.plan.storage_limit_bytes else 0,
@@ -197,6 +200,22 @@ def create_bucket_endpoint(
             detail=f"Batas bucket paket Anda adalah {sub.plan.bucket_limit}. Upgrade paket untuk menambah lebih banyak bucket.",
         )
 
+    # Nama bucket harus unik per pengguna (dipakai sebagai identitas di URL).
+    dup = (
+        db.query(StorageBucket)
+        .filter(
+            StorageBucket.user_id == current_user.id,
+            StorageBucket.display_name == body.display_name,
+            StorageBucket.status.in_([BucketStatus.creating, BucketStatus.active]),
+        )
+        .first()
+    )
+    if dup:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Anda sudah memiliki bucket dengan nama ini. Gunakan nama lain.",
+        )
+
     internal_name = _make_internal_name(current_user.id, body.display_name, db)
 
     bucket = StorageBucket(
@@ -239,16 +258,16 @@ def create_bucket_endpoint(
     return bucket
 
 
-@router.get("/buckets/{bucket_id}", response_model=BucketDetailResponse)
+@router.get("/buckets/{bucket_name}", response_model=BucketDetailResponse)
 def get_bucket(
-    bucket_id: int,
+    bucket_name: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     sub = _get_active_subscription(current_user.id, db)
 
     bucket = db.query(StorageBucket).filter(
-        StorageBucket.id == bucket_id,
+        StorageBucket.display_name == bucket_name,
         StorageBucket.user_id == current_user.id,
         StorageBucket.status != BucketStatus.deleted,
     ).first()
@@ -273,9 +292,9 @@ def _get_storage_used_bytes(user_id: int, db: Session) -> int:
     return int(result)
 
 
-def _get_bucket_or_404(bucket_id: int, user_id: int, db: Session) -> StorageBucket:
+def _get_bucket_or_404(bucket_name: str, user_id: int, db: Session) -> StorageBucket:
     bucket = db.query(StorageBucket).filter(
-        StorageBucket.id == bucket_id,
+        StorageBucket.display_name == bucket_name,
         StorageBucket.user_id == user_id,
         StorageBucket.status == BucketStatus.active,
     ).first()
@@ -286,70 +305,67 @@ def _get_bucket_or_404(bucket_id: int, user_id: int, db: Session) -> StorageBuck
 
 # ── Object endpoints ───────────────────────────────────────────────
 
-@router.get("/buckets/{bucket_id}/objects", response_model=list[ObjectResponse])
+@router.get("/buckets/{bucket_name}/objects", response_model=list[ObjectResponse])
 def list_objects(
-    bucket_id: int,
+    bucket_name: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     from botocore.exceptions import ClientError as BotoClientError
 
     sub = _get_active_subscription(current_user.id, db)
-    bucket = _get_bucket_or_404(bucket_id, current_user.id, db)
+    bucket = _get_bucket_or_404(bucket_name, current_user.id, db)
 
     db_objects = (
         db.query(StorageObject)
         .filter(
-            StorageObject.bucket_id == bucket_id,
+            StorageObject.bucket_id == bucket.id,
             StorageObject.status == ObjectStatus.available,
         )
         .all()
     )
 
     if db_objects:
-        # Sinkronisasi dengan MiniStack — 1 API call untuk semua file
+        # Sinkronisasi dengan MiniStack — 1 API call untuk semua file.
+        # DB adalah sumber kebenaran. Jika ada objek di DB yang HILANG di MiniStack
+        # (mis. MiniStack pernah reset), JANGAN hapus record DB — pulihkan dengan
+        # upload placeholder (self-heal) agar daftar & unduh tetap konsisten.
         s3 = get_s3_client()
         try:
             _ensure_bucket_exists(s3, bucket.internal_name)
             response = s3.list_objects_v2(Bucket=bucket.internal_name)
-            existing_keys = {
-                obj["Key"]
-                for obj in response.get("Contents", [])
-            }
-            # Hapus dari DB file yang tidak ada di MiniStack
-            cleaned = []
+            existing_keys = {obj["Key"] for obj in response.get("Contents", [])}
             for obj in db_objects:
-                if obj.object_key in existing_keys:
-                    cleaned.append(obj)
-                else:
-                    db.delete(obj)
-            if len(cleaned) < len(db_objects):
-                # Ada object yang hilang → recalc counter agar akurat
-                db.flush()
-                usage_helper.recalculate(db, sub)
-                usage_helper.evaluate_quota_status(db, sub)
-                db.commit()
-            db_objects = cleaned
+                if obj.object_key not in existing_keys:
+                    try:
+                        s3.put_object(
+                            Bucket=bucket.internal_name,
+                            Key=obj.object_key,
+                            Body=OBJECT_PLACEHOLDER,
+                            ContentType=obj.content_type or "application/octet-stream",
+                        )
+                    except BotoClientError:
+                        pass
         except BotoClientError:
-            pass  # Jika MiniStack tidak bisa diakses, tetap tampilkan dari DB
+            pass  # MiniStack tak bisa diakses → tetap tampilkan dari DB
 
     return sorted(db_objects, key=lambda o: o.uploaded_at or o.created_at, reverse=True)
 
 
 @router.post(
-    "/buckets/{bucket_id}/objects",
+    "/buckets/{bucket_name}/objects",
     response_model=ObjectResponse,
     status_code=status.HTTP_201_CREATED,
 )
 async def upload_file(
-    bucket_id: int,
+    bucket_name: str,
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     sub = _get_active_subscription(current_user.id, db)
     _require_can_add(sub)
-    bucket = _get_bucket_or_404(bucket_id, current_user.id, db)
+    bucket = _get_bucket_or_404(bucket_name, current_user.id, db)
 
     # Bucket dorman (melebihi batas jumlah paket) → tidak boleh upload
     if bucket.id in _dormant_bucket_ids(db, current_user.id, sub.plan.bucket_limit):
@@ -425,19 +441,19 @@ async def upload_file(
     return obj
 
 
-@router.get("/buckets/{bucket_id}/objects/{object_id}/download")
+@router.get("/buckets/{bucket_name}/objects/{object_id}/download")
 def download_file(
-    bucket_id: int,
+    bucket_name: str,
     object_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     sub = _get_active_subscription(current_user.id, db)
-    bucket = _get_bucket_or_404(bucket_id, current_user.id, db)
+    bucket = _get_bucket_or_404(bucket_name, current_user.id, db)
 
     obj = db.query(StorageObject).filter(
         StorageObject.id == object_id,
-        StorageObject.bucket_id == bucket_id,
+        StorageObject.bucket_id == bucket.id,
         StorageObject.status == ObjectStatus.available,
     ).first()
     if not obj:
@@ -449,19 +465,14 @@ def download_file(
 
     s3 = get_s3_client()
     try:
-        _ensure_bucket_exists(s3, bucket.internal_name)
-        s3.head_object(Bucket=bucket.internal_name, Key=obj.object_key)
-    except BotoClientError as e:
-        code = e.response["Error"]["Code"]
-        if code in ("404", "NoSuchKey"):
-            # File tidak ada di MiniStack — hapus permanen dari database + update counter
-            usage_helper.remove_object(db, sub, obj.size_bytes)
-            db.delete(obj)
-            db.commit()
+        # Jika objek hilang di MiniStack (mis. setelah reset), pulihkan dengan
+        # placeholder daripada menghapus metadata DB → unduh tetap berhasil.
+        if not ensure_object_exists(s3, bucket.internal_name, obj.object_key, obj.content_type):
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="File tidak ditemukan di storage dan telah dihapus dari sistem.",
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Gagal mengakses objek di storage.",
             )
+    except BotoClientError as e:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e))
 
     stream = download_object(bucket.internal_name, obj.object_key)
@@ -472,19 +483,19 @@ def download_file(
     )
 
 
-@router.delete("/buckets/{bucket_id}/objects/{object_id}", status_code=status.HTTP_200_OK)
+@router.delete("/buckets/{bucket_name}/objects/{object_id}", status_code=status.HTTP_200_OK)
 def delete_file(
-    bucket_id: int,
+    bucket_name: str,
     object_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     sub = _get_active_subscription(current_user.id, db)
-    bucket = _get_bucket_or_404(bucket_id, current_user.id, db)
+    bucket = _get_bucket_or_404(bucket_name, current_user.id, db)
 
     obj = db.query(StorageObject).filter(
         StorageObject.id == object_id,
-        StorageObject.bucket_id == bucket_id,
+        StorageObject.bucket_id == bucket.id,
         StorageObject.status == ObjectStatus.available,
     ).first()
     if not obj:
@@ -526,14 +537,14 @@ def delete_file(
 
 # ── Empty bucket (hapus semua file) ────────────────────────────────
 
-@router.post("/buckets/{bucket_id}/empty", status_code=status.HTTP_200_OK)
+@router.post("/buckets/{bucket_name}/empty", status_code=status.HTTP_200_OK)
 def empty_bucket(
-    bucket_id: int,
+    bucket_name: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     sub = _get_active_subscription(current_user.id, db)
-    bucket = _get_bucket_or_404(bucket_id, current_user.id, db)
+    bucket = _get_bucket_or_404(bucket_name, current_user.id, db)
 
     objs = db.query(StorageObject).filter(
         StorageObject.bucket_id == bucket.id,
@@ -579,9 +590,9 @@ def empty_bucket(
 
 # ── Delete bucket ──────────────────────────────────────────────────
 
-@router.delete("/buckets/{bucket_id}", status_code=status.HTTP_200_OK)
+@router.delete("/buckets/{bucket_name}", status_code=status.HTTP_200_OK)
 def delete_bucket_endpoint(
-    bucket_id: int,
+    bucket_name: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
     x_transaction_pin: str | None = Header(default=None, alias="X-Transaction-PIN"),
@@ -590,7 +601,7 @@ def delete_bucket_endpoint(
     sub = _get_active_subscription(current_user.id, db)
 
     bucket = db.query(StorageBucket).filter(
-        StorageBucket.id == bucket_id,
+        StorageBucket.display_name == bucket_name,
         StorageBucket.user_id == current_user.id,
         StorageBucket.status == BucketStatus.active,
     ).first()

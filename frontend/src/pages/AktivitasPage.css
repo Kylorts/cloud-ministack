@@ -42,7 +42,7 @@
 .aktivitas-table th:nth-child(5) { width: 120px; }
 .aktivitas-table thead tr { background: #f9fafb; }
 .aktivitas-table th { padding: 12px 16px; text-align: left; font-size: 10px; font-weight: 600; font-family: var(--font-ui); color: #9ca3af; letter-spacing: 0.05em; text-transform: uppercase; border-bottom: 1px solid #e5e7eb; white-space: nowrap; }
-.aktivitas-table td { padding: 16px; border-bottom: 1px solid #f3f4f6; font-size: 13px; font-family: var(--font-ui); color: var(--color-dark); }
+.aktivitas-table td { padding: 16px; border-bottom: 1px solid #f3f4f6; font-size: 13px; font-family: var(--font-ui); color: var(--color-dark); overflow-wrap: anywhere; }
 .aktivitas-table tbody tr:last-child td { border-bottom: none; }
 .aktivitas-table tbody tr:hover { background: #fafafa; }
 .aktivitas-table-empty { text-align: center; padding: 40px !important; color: #9ca3af; }

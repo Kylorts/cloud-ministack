@@ -45,6 +45,11 @@ def bucket_exists(internal_name: str) -> bool:
 
 # ── Object operations ──────────────────────────────────────────────
 
+# Isi placeholder saat objek perlu "dipulihkan" di MiniStack (mis. setelah
+# MiniStack kehilangan datanya/restart). Metadata sebenarnya tetap di DB.
+OBJECT_PLACEHOLDER = b"jadestack-placeholder"
+
+
 def _ensure_bucket_exists(client, bucket_name: str) -> None:
     """Pastikan bucket ada di MiniStack. Auto-recreate jika hilang (misal setelah restart)."""
     try:
@@ -73,6 +78,33 @@ def upload_object(
     )
     head = client.head_object(Bucket=bucket_name, Key=object_key)
     return head.get("ETag", "").strip('"')
+
+
+def ensure_object_exists(client, bucket_name: str, object_key: str, content_type: str | None = None) -> bool:
+    """Pastikan objek ada di MiniStack; jika hilang, upload placeholder (self-heal).
+
+    Dipakai agar inkonsistensi DB↔MiniStack (mis. MiniStack reset) tidak membuat
+    daftar/unduh file rusak — metadata DB tetap sumber kebenaran. Return True bila
+    objek tersedia (sudah ada atau berhasil dipulihkan).
+    """
+    _ensure_bucket_exists(client, bucket_name)
+    try:
+        client.head_object(Bucket=bucket_name, Key=object_key)
+        return True
+    except ClientError as e:
+        code = e.response.get("Error", {}).get("Code")
+        if code not in ("404", "NoSuchKey"):
+            return False
+        try:
+            client.put_object(
+                Bucket=bucket_name,
+                Key=object_key,
+                Body=OBJECT_PLACEHOLDER,
+                ContentType=content_type or "application/octet-stream",
+            )
+            return True
+        except ClientError:
+            return False
 
 
 def download_object(bucket_name: str, object_key: str) -> Generator[bytes, None, None]:

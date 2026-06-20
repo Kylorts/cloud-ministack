@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
+import { parseUTC } from '../utils/datetime'
 import Navbar from '../components/Navbar'
 import PinPromptModal from '../components/PinPromptModal'
-import { getAccessKeys, createAccessKey, revokeAccessKey } from '../services/accessKeys'
+import { getAccessKeys, createAccessKey, revokeAccessKey, getKeyPolicies } from '../services/accessKeys'
 import { getPinErrorCode } from '../services/security'
 import './AccessKeysPage.css'
 
@@ -14,7 +15,7 @@ function CopyIcon() {
 
 function formatDateTime(dateStr) {
   if (!dateStr) return '-'
-  const d = new Date(dateStr)
+  const d = parseUTC(dateStr)
   const t = d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
   return `${t} · ${d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}`
 }
@@ -22,15 +23,31 @@ function formatDateTime(dateStr) {
 /* ── Modal Buat Kunci ── */
 function CreateKeyModal({ category, onClose, onCreated }) {
   const [name, setName] = useState('')
-  const [permission, setPermission] = useState('full')
+  const [policyId, setPolicyId] = useState('')
+  const [policies, setPolicies] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    getKeyPolicies(category).then((r) => {
+      const list = r.data || []
+      setPolicies(list)
+      // Default: policy "Full" bila ada, jika tidak opsi pertama.
+      const def = list.find((p) => /full/i.test(p.name)) || list[0]
+      if (def) setPolicyId(String(def.id))
+    }).catch(() => setPolicies([]))
+  }, [category])
+
+  const selected = policies.find((p) => String(p.id) === policyId)
 
   async function handleSubmit(e) {
     e.preventDefault()
     setError(''); setLoading(true)
     try {
-      const res = await createAccessKey(category, { name: name || null, permission })
+      const res = await createAccessKey(category, {
+        name: name || null,
+        policy_id: policyId ? Number(policyId) : null,
+      })
       onCreated(res.data)
     } catch (err) {
       const d = err.response?.data?.detail
@@ -54,15 +71,18 @@ function CreateKeyModal({ category, onClose, onCreated }) {
               value={name} onChange={(e) => setName(e.target.value)} />
           </div>
           <div className="modal-field">
-            <label className="modal-label">Izin Akses</label>
-            <select className="modal-select" value={permission} onChange={(e) => setPermission(e.target.value)}>
-              <option value="full">Full Access (baca + tulis + hapus)</option>
-              <option value="read_only">Read-Only (hanya baca/unduh)</option>
-            </select>
+            <label className="modal-label">Izin Akses (IAM Policy)</label>
+            {policies.length === 0 ? (
+              <span className="modal-hint">Belum ada IAM policy tersedia untuk kategori ini.</span>
+            ) : (
+              <select className="modal-select" value={policyId} onChange={(e) => setPolicyId(e.target.value)}>
+                {policies.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}{p.policy_type === 'system' ? ' (system)' : ''}</option>
+                ))}
+              </select>
+            )}
             <span className="modal-hint">
-              {permission === 'full'
-                ? 'Kunci ini bisa membaca, mengunggah, dan menghapus resource.'
-                : 'Kunci ini hanya bisa membaca/mengunduh, tidak bisa mengubah resource.'}
+              {selected?.description || 'Policy menentukan operasi yang diizinkan kunci ini. Atur policy di panel Admin → IAM.'}
             </span>
           </div>
           {error && <div className="modal-error">{error}</div>}
@@ -211,17 +231,17 @@ export default function AccessKeysPage() {
             </div>
 
             <table className="ak-table">
-              <colgroup><col /><col /><col /><col /><col /></colgroup>
+              <colgroup><col /><col /><col /><col /><col /><col /></colgroup>
               <thead>
                 <tr>
-                  <th>ID KUNCI AKSES</th><th>STATUS</th><th>DIBUAT PADA</th><th>TERAKHIR DIGUNAKAN</th><th>AKSI</th>
+                  <th>ID KUNCI AKSES</th><th>STATUS</th><th>IZIN / POLICY</th><th>DIBUAT PADA</th><th>TERAKHIR DIGUNAKAN</th><th>AKSI</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={5} className="ak-empty">Memuat...</td></tr>
+                  <tr><td colSpan={6} className="ak-empty">Memuat...</td></tr>
                 ) : keys.length === 0 ? (
-                  <tr><td colSpan={5} className="ak-empty">Belum ada access key. Buat kunci pertama Anda.</td></tr>
+                  <tr><td colSpan={6} className="ak-empty">Belum ada access key. Buat kunci pertama Anda.</td></tr>
                 ) : keys.map((k) => (
                   <tr key={k.id} className={k.status === 'revoked' ? 'ak-row-revoked' : ''}>
                     <td className="mono ak-keyid">{k.access_key_id}{k.name ? <span className="ak-keyname"> · {k.name}</span> : ''}</td>
@@ -229,6 +249,11 @@ export default function AccessKeysPage() {
                       {k.status === 'active'
                         ? <span className="ak-badge ak-badge--active">● Aktif</span>
                         : <span className="ak-badge ak-badge--revoked">Dicabut</span>}
+                    </td>
+                    <td className="ak-meta">
+                      {k.policy_name
+                        ? <span className="ak-badge ak-badge--policy">🛡 {k.policy_name}</span>
+                        : (k.permission === 'read_only' ? 'Read-Only' : 'Full Access')}
                     </td>
                     <td className="ak-meta">{formatDateTime(k.created_at)}</td>
                     <td className="ak-meta">{k.last_used_at ? formatDateTime(k.last_used_at) : '-'}</td>

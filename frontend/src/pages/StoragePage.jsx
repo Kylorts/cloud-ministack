@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { parseUTC } from '../utils/datetime'
 import { useNavigate } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import DormantNotice from '../components/DormantNotice'
@@ -41,7 +42,7 @@ function formatBytes(bytes) {
 
 function formatDate(dateStr) {
   if (!dateStr) return '-'
-  return new Date(dateStr).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+  return parseUTC(dateStr).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
 /* ── Modal Buat Bucket ── */
@@ -226,12 +227,16 @@ export default function StoragePage() {
           <div className="storage-warning-banner storage-warning-banner--danger">
             ⚠ Kuota terlampaui (OVER_QUOTA). Anda masih bisa melihat, mengunduh, dan menghapus,
             tetapi <strong>tidak bisa menambah bucket atau upload file baru</strong>.
+            {usage.grace_until && (
+              <> Rapikan sebelum <strong>{parseUTC(usage.grace_until).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</strong> atau langganan akan di-<strong>suspend</strong>.</>
+            )}
             {' '}<a href="/paket" className="storage-warning-link">Upgrade paket</a> atau kurangi pemakaian.
           </div>
         )}
         {usage?.subscription_status === 'suspended' && (
           <div className="storage-warning-banner storage-warning-banner--danger">
-            Langganan Anda disuspend. Layanan dibatasi sementara.
+            ⛔ Langganan Anda <strong>disuspend</strong> (grace period habis &amp; pemakaian masih melebihi kuota).
+            Upload &amp; pembuatan bucket dinonaktifkan. Hubungi admin untuk memulihkan langganan.
           </div>
         )}
         {buckets.some((b) => b.dormant) && (
@@ -327,7 +332,7 @@ export default function StoragePage() {
                     <td>
                       <button
                         className="bucket-open-btn"
-                        onClick={() => navigate(`/storage/buckets/${bucket.id}`)}
+                        onClick={() => navigate(`/storage/buckets/${bucket.display_name}`)}
                       >
                         Buka
                       </button>

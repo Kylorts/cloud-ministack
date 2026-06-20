@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
+import { parseUTC } from '../utils/datetime'
 import { useParams, useNavigate } from 'react-router-dom'
 import AdminNav from '../components/AdminNav'
 import { getAdminUser, setUserStatus } from '../services/admin'
+import { actionLabel } from '../utils/actionLabels'
 import './AdminDashboardPage.css'
 import './AdminPages.css'
 
@@ -15,7 +17,7 @@ function fmtBytes(b) {
 }
 function fmtDateTime(s) {
   if (!s) return '-'
-  const d = new Date(s)
+  const d = parseUTC(s)
   return `${d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}, ${d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}`
 }
 
@@ -130,7 +132,7 @@ export default function AdminUserDetailPage() {
               ) : u.activities.map((a) => (
                 <tr key={a.id}>
                   <td className="adm-util-cell">{fmtDateTime(a.created_at)}</td>
-                  <td className="adm-keyid">{a.action}</td>
+                  <td className="adm-keyid">{actionLabel(a.action)}</td>
                   <td className="adm-owner-cell">{a.description}</td>
                   <td className="adm-util-cell">{a.ip_address || '-'}</td>
                 </tr>

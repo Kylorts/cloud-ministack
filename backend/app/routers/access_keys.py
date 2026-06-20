@@ -11,10 +11,11 @@ from app.core.pin import require_pin
 from app.core.security import hash_password
 from app.database import get_db
 from app.models.access_key import AccessKey, KeyPermission, KeyStatus
+from app.models.iam_policy import IamPolicy
 from app.models.subscription import Subscription, SubscriptionStatus
 from app.models.user import User
 from app.schemas.access_key import (
-    AccessKeyCreatedResponse, AccessKeyCreateRequest, AccessKeyResponse,
+    AccessKeyCreatedResponse, AccessKeyCreateRequest, AccessKeyResponse, IamPolicyOption,
 )
 
 router = APIRouter(prefix="/access-keys", tags=["access-keys"])
@@ -46,6 +47,31 @@ def _get_sub(user_id: int, category: str, db: Session) -> Subscription:
             detail=f"Anda belum memiliki langganan {label} aktif. Pilih paket {label} terlebih dahulu.",
         )
     return sub
+
+
+def _policy_has_prefix(document: str | None, prefix: str) -> bool:
+    """True jika dokumen policy memuat action ber-prefix tertentu (mis. 's3:') atau '*'.
+
+    Dipakai untuk menyaring policy yang relevan bagi kategori kunci (storage).
+    """
+    import json as _json
+
+    try:
+        doc = _json.loads(document or "")
+    except Exception:
+        return False
+    statements = doc.get("Statement", [])
+    if isinstance(statements, dict):
+        statements = [statements]
+    for st in statements:
+        if not isinstance(st, dict):
+            continue
+        actions = st.get("Action")
+        actions = actions if isinstance(actions, list) else [actions]
+        for a in actions:
+            if isinstance(a, str) and (a == "*" or a.startswith(prefix)):
+                return True
+    return False
 
 
 def _gen_access_key_id() -> str:
@@ -89,6 +115,22 @@ def list_keys(
     return keys + revoked
 
 
+@router.get("/policies", response_model=list[IamPolicyOption])
+def list_selectable_policies(
+    category: str = Query("storage"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Policy yang bisa dilekatkan ke kunci kategori ini (untuk dropdown).
+
+    Untuk storage, hanya policy yang menyebut action `s3:` atau wildcard `*`.
+    """
+    pols = db.query(IamPolicy).order_by(IamPolicy.created_at.asc()).all()
+    prefix = "hosting:" if category == "hosting" else "s3:"
+    pols = [p for p in pols if _policy_has_prefix(p.document, prefix)]
+    return [IamPolicyOption.model_validate(p) for p in pols]
+
+
 @router.post("", response_model=AccessKeyCreatedResponse, status_code=status.HTTP_201_CREATED)
 def create_key(
     body: AccessKeyCreateRequest,
@@ -127,6 +169,16 @@ def create_key(
                    f"Cabut kunci lama atau upgrade paket.",
         )
 
+    # Validasi IAM policy (opsional). Bila diisi, policy menggantikan permission.
+    policy = None
+    if body.policy_id is not None:
+        policy = db.get(IamPolicy, body.policy_id)
+        if not policy:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="IAM policy tidak ditemukan.",
+            )
+
     # Generate
     while True:
         access_key_id = _gen_access_key_id()
@@ -143,6 +195,7 @@ def create_key(
         secret_key_hash=hash_password(secret),
         secret_key_last4=secret[-4:],
         permission=KeyPermission(body.permission),
+        policy_id=(policy.id if policy else None),
         status=KeyStatus.active,
     )
     db.add(key)
@@ -152,7 +205,10 @@ def create_key(
         db,
         actor_user_id=current_user.id,
         action="ACCESS_KEY_CREATED",
-        description=f"Membuat access key ({category}){' - ' + body.name if body.name else ''}",
+        description=(
+            f"Membuat access key ({category}){' - ' + body.name if body.name else ''}"
+            f"{' [policy: ' + policy.name + ']' if policy else ''}"
+        ),
         target_type="ACCESS_KEY",
         target_id=key.id,
     )

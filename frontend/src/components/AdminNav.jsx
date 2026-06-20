@@ -39,6 +39,18 @@ function ChartIcon() {
 function ReceiptIcon() {
   return <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M4 2v20l3-2 3 2 3-2 3 2 3-2V2l-3 2-3-2-3 2-3-2-3 2Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/><path d="M8 9h8M8 13h5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
 }
+function LogIcon() {
+  return <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M4 5h16M4 12h16M4 19h10" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/></svg>
+}
+function AuditIcon() {
+  return <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M9 11l3 3L22 4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/></svg>
+}
+function KeyIcon() {
+  return <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M21 2l-2 2m-7.6 7.6a5.5 5.5 0 1 1-7.78 7.78 5.5 5.5 0 0 1 7.78-7.78zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
+}
+function ShieldIcon() {
+  return <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3Z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round"/><path d="M9 12l2 2 4-4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
+}
 
 const ADMIN_NAV = [
   { path: '/admin', label: 'Dasbor', icon: GridIcon },
@@ -47,6 +59,10 @@ const ADMIN_NAV = [
   { path: '/admin/paket', label: 'Paket Layanan', icon: PackageIcon },
   { path: '/admin/langganan', label: 'Langganan', icon: CardIcon },
   { path: '/admin/transaksi', label: 'Riwayat Transaksi', icon: ReceiptIcon },
+  { path: '/admin/logs', label: 'Log Sistem', icon: LogIcon },
+  { path: '/admin/audit', label: 'Audit Admin', icon: AuditIcon },
+  { path: '/admin/keys', label: 'Access Keys Global', icon: KeyIcon },
+  { path: '/admin/iam', label: 'Policy IAM', icon: ShieldIcon },
 ]
 
 export default function AdminNav({ breadcrumbs = [] }) {

@@ -16,7 +16,10 @@ class SubscriptionResponse(BaseModel):
     status: str
     current_period_start: datetime
     current_period_end: datetime
+    grace_until: datetime | None = None
     cancelled_at: datetime | None
+    scheduled_plan_id: int | None = None
+    scheduled_plan_name: str | None = None
     plan: PlanResponse
 
     model_config = {"from_attributes": True}

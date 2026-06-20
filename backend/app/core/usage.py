@@ -5,7 +5,7 @@ Counter di-update secara incremental (tambah/kurang) setiap aksi
 storage. Tersedia juga fungsi recalculate() sebagai sumber kebenaran
 jika counter drift dari data sebenarnya di storage_objects.
 """
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -14,6 +14,9 @@ from app.models.storage_bucket import BucketStatus, StorageBucket
 from app.models.storage_object import ObjectStatus, StorageObject
 from app.models.subscription import Subscription
 from app.models.usage_counter import UsageCounter
+
+# Lama grace period setelah masuk OVER_QUOTA sebelum sistem men-suspend.
+GRACE_PERIOD_DAYS = 7
 
 
 def _compute_from_data(db: Session, user_id: int) -> dict:
@@ -149,11 +152,58 @@ def evaluate_quota_status(db: Session, subscription) -> None:
     over = is_over_limit(subscription, counter)
 
     if over and subscription.status == SubscriptionStatus.active:
+        now = datetime.utcnow()
         subscription.status = SubscriptionStatus.over_quota
-        subscription.over_quota_since = datetime.utcnow()
+        subscription.over_quota_since = now
+        subscription.grace_until = now + timedelta(days=GRACE_PERIOD_DAYS)
     elif not over and subscription.status == SubscriptionStatus.over_quota:
         subscription.status = SubscriptionStatus.active
         subscription.over_quota_since = None
+        subscription.grace_until = None
+
+
+def apply_grace_suspend(db: Session, subscription) -> bool:
+    """
+    Lazy-check grace period: jika langganan OVER_QUOTA dan grace period sudah
+    habis sementara pemakaian masih melebihi limit, sistem men-suspend langganan
+    secara otomatis. Dikembalikan True jika terjadi transisi suspend.
+
+    Tidak auto-pulih dari suspended (keputusan: hanya admin yang bisa unsuspend).
+    """
+    from app.models.activity_log import ActorType
+    from app.models.subscription import SubscriptionStatus
+
+    if subscription.status != SubscriptionStatus.over_quota:
+        return False
+    if not subscription.grace_until or datetime.utcnow() <= subscription.grace_until:
+        return False
+
+    # Pastikan memang masih melebihi limit sebelum men-suspend.
+    counter = get_or_create_counter(db, subscription)
+    if not is_over_limit(subscription, counter):
+        return False
+
+    subscription.status = SubscriptionStatus.suspended
+    subscription.suspended_at = datetime.utcnow()
+    try:
+        from app.core.activity import log_activity
+
+        log_activity(
+            db,
+            actor_user_id=subscription.user_id,
+            actor_type=ActorType.system,
+            action="SUBSCRIPTION_SUSPENDED",
+            description=(
+                "Langganan disuspend otomatis: grace period habis dan pemakaian "
+                "masih melebihi kuota."
+            ),
+            target_type="subscription",
+            target_id=subscription.id,
+        )
+    except Exception:
+        pass
+    db.commit()
+    return True
 
 
 def add_object(db: Session, subscription: Subscription, size_bytes: int) -> None:

@@ -1,34 +1,9 @@
 import { useEffect, useState, useRef } from 'react'
+import { parseUTC } from '../utils/datetime'
 import Navbar from '../components/Navbar'
 import { getActivityLogs } from '../services/activity'
+import { actionLabel } from '../utils/actionLabels'
 import './AktivitasPage.css'
-
-const ACTION_LABELS = {
-  USER_LOGIN: 'Login Berhasil',
-  PACKAGE_SUBSCRIBED: 'Berlangganan Paket',
-  PACKAGE_UPGRADED: 'Upgrade Paket',
-  USER_REGISTERED: 'Daftar Akun',
-  SUBSCRIPTION_CANCELLED: 'Batalkan Langganan',
-  BUCKET_CREATED: 'Buat Bucket',
-  BUCKET_DELETED: 'Hapus Bucket',
-  FILE_UPLOADED: 'Unggah File',
-  FILE_DELETED: 'Hapus File',
-  STATIC_SITE_CREATED: 'Buat Situs',
-  STATIC_SITE_DEPLOYED: 'Deploy Static Site',
-  STATIC_SITE_ROLLBACK: 'Rollback Situs',
-  STATIC_SITE_DELETED: 'Hapus Situs',
-  STATIC_SITE_DEPLOYMENT_DELETED: 'Hapus Deployment',
-  ACCESS_KEY_CREATED: 'Buat Access Key',
-  ACCESS_KEY_REVOKED: 'Cabut Access Key',
-  PASSWORD_CHANGED: 'Ubah Kata Sandi',
-  PIN_SET: 'Atur PIN Transaksi',
-  PIN_CHANGED: 'Ubah PIN Transaksi',
-  PIN_REMOVED: 'Nonaktifkan PIN',
-}
-
-function actionLabel(a) {
-  return ACTION_LABELS[a] || a
-}
 
 function getResource(log) {
   const m = log.description?.match(/'([^']+)'/)
@@ -44,7 +19,7 @@ function statusOf(log) {
 
 function formatWita(dateStr) {
   if (!dateStr) return '-'
-  const d = new Date(dateStr)
+  const d = parseUTC(dateStr)
   const s = d.toLocaleString('id-ID', {
     day: 'numeric', month: 'short', year: 'numeric',
     hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Makassar',

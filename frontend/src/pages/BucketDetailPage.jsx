@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { parseUTC } from '../utils/datetime'
 import { useParams, useNavigate } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import PinPromptModal from '../components/PinPromptModal'
@@ -42,7 +43,7 @@ function formatBytes(bytes) {
 
 function formatDate(dateStr) {
   if (!dateStr) return '-'
-  const d = new Date(dateStr)
+  const d = parseUTC(dateStr)
   const time = d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
   const date = d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
   return `${time} · ${date}`
@@ -103,51 +104,78 @@ function FileTypeIcon({ contentType, filename }) {
   )
 }
 
-/* ── Upload Modal ── */
-function UploadModal({ bucketId, maxFileSizeBytes, storageUsedBytes, storageLimitBytes, onClose, onSuccess }) {
-  const [file, setFile] = useState(null)
-  const [fileSizeError, setFileSizeError] = useState('')
+/* ── Upload Modal (multi-file, maks 10) ── */
+const MAX_UPLOAD_FILES = 10
+
+function UploadModal({ bucketId, maxFileSizeBytes, storageUsedBytes, storageLimitBytes, onClose, onSuccess, onRefresh }) {
+  const [items, setItems] = useState([]) // { id, file, status: pending|uploading|done|error, progress, error }
+  const [notice, setNotice] = useState('')
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
   const [dragging, setDragging] = useState(false)
-  const [progress, setProgress] = useState(0)
 
   const maxMb = maxFileSizeBytes ? (maxFileSizeBytes / (1024 * 1024)).toFixed(0) : null
 
-  function validateAndSetFile(f) {
-    if (!f) return
-    if (maxFileSizeBytes && f.size > maxFileSizeBytes) {
-      setFileSizeError(`File terlalu besar. Maksimal ${maxMb} MB per file (file ini ${formatBytes(f.size)}).`)
-    } else if (storageLimitBytes && (storageUsedBytes + f.size) > storageLimitBytes) {
-      const sisa = storageLimitBytes - storageUsedBytes
-      setFileSizeError(`Kuota storage tidak cukup. Sisa ruang: ${formatBytes(sisa)}.`)
-    } else {
-      setFileSizeError('')
+  function addFiles(fileList) {
+    const incoming = Array.from(fileList || [])
+    if (incoming.length === 0) return
+    setNotice('')
+    const slotsLeft = MAX_UPLOAD_FILES - items.length
+    let overflow = 0, tooBig = 0
+    const accepted = []
+    for (const f of incoming) {
+      if (accepted.length >= slotsLeft) { overflow++; continue }
+      if (maxFileSizeBytes && f.size > maxFileSizeBytes) { tooBig++; continue }
+      accepted.push({
+        id: (window.crypto?.randomUUID?.() || String(Math.random())),
+        file: f, status: 'pending', progress: 0, error: '',
+      })
     }
-    setFile(f)
-    setProgress(0)
+    const msgs = []
+    if (overflow) msgs.push(`Maksimal ${MAX_UPLOAD_FILES} file per unggah — ${overflow} file diabaikan.`)
+    if (tooBig) msgs.push(`${tooBig} file dilewati karena melebihi ${maxMb} MB.`)
+    if (msgs.length) setNotice(msgs.join(' '))
+    if (accepted.length) setItems((prev) => [...prev, ...accepted])
   }
 
-  function handleDrop(e) {
-    e.preventDefault()
-    setDragging(false)
-    validateAndSetFile(e.dataTransfer.files[0])
+  function removeItem(id) {
+    if (loading) return
+    setItems((prev) => prev.filter((it) => it.id !== id))
   }
+
+  const pendingSize = items.filter((i) => i.status !== 'done').reduce((a, i) => a + i.file.size, 0)
+  const quotaExceeded = !!storageLimitBytes && (storageUsedBytes + pendingSize) > storageLimitBytes
+  const uploadable = items.filter((i) => i.status === 'pending' || i.status === 'error')
+  const doneCount = items.filter((i) => i.status === 'done').length
 
   async function handleSubmit(e) {
     e.preventDefault()
-    if (!file || fileSizeError) return
-    setError('')
+    if (loading || uploadable.length === 0 || quotaExceeded) return
     setLoading(true)
-    setProgress(0)
-    try {
-      await uploadFile(bucketId, file, setProgress)
-      onSuccess()
-    } catch (err) {
-      const detail = err.response?.data?.detail
-      setError(Array.isArray(detail) ? detail[0]?.msg : (detail || 'Gagal mengunggah file'))
-      setLoading(false)
+    let anyFail = false, anyOk = false
+    for (const it of uploadable) {
+      setItems((prev) => prev.map((f) => f.id === it.id ? { ...f, status: 'uploading', progress: 0, error: '' } : f))
+      try {
+        await uploadFile(bucketId, it.file, (p) =>
+          setItems((prev) => prev.map((f) => f.id === it.id ? { ...f, progress: p } : f)))
+        anyOk = true
+        setItems((prev) => prev.map((f) => f.id === it.id ? { ...f, status: 'done', progress: 100 } : f))
+      } catch (err) {
+        anyFail = true
+        const d = err.response?.data?.detail
+        const msg = Array.isArray(d) ? d[0]?.msg : (d || 'Gagal mengunggah')
+        setItems((prev) => prev.map((f) => f.id === it.id ? { ...f, status: 'error', error: msg } : f))
+      }
     }
+    setLoading(false)
+    if (!anyFail) onSuccess()              // semua sukses → tutup + reload
+    else if (anyOk && onRefresh) onRefresh() // sebagian sukses → sinkronkan daftar, modal tetap terbuka
+  }
+
+  function statusText(it) {
+    if (it.status === 'uploading') return `${it.progress}%`
+    if (it.status === 'done') return 'Selesai ✓'
+    if (it.status === 'error') return 'Gagal'
+    return formatBytes(it.file.size)
   }
 
   return (
@@ -155,7 +183,7 @@ function UploadModal({ bucketId, maxFileSizeBytes, storageUsedBytes, storageLimi
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2 className="modal-title">Unggah File</h2>
-          <button className="modal-close" onClick={onClose}>✕</button>
+          <button className="modal-close" onClick={() => !loading && onClose()}>✕</button>
         </div>
         <form onSubmit={handleSubmit}>
 
@@ -164,43 +192,55 @@ function UploadModal({ bucketId, maxFileSizeBytes, storageUsedBytes, storageLimi
             className={`up-drop ${dragging ? 'up-drop--active' : ''}`}
             onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
             onDragLeave={(e) => { e.preventDefault(); setDragging(false) }}
-            onDrop={handleDrop}
+            onDrop={(e) => { e.preventDefault(); setDragging(false); addFiles(e.dataTransfer.files) }}
           >
-            <input type="file" style={{ display: 'none' }}
-              onChange={(e) => validateAndSetFile(e.target.files[0])} />
+            <input type="file" multiple style={{ display: 'none' }}
+              onChange={(e) => { addFiles(e.target.files); e.target.value = '' }} />
             <div className="up-drop-icon">
               <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"
                   stroke="#062F28" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
             </div>
-            <p className="up-drop-text">Klik untuk memilih file atau seret file ke sini.</p>
-            {maxMb && <p className="up-drop-sub">(Maks {maxMb}MB per file)</p>}
+            <p className="up-drop-text">Klik atau seret beberapa file ke sini.</p>
+            <p className="up-drop-sub">Maksimal {MAX_UPLOAD_FILES} file{maxMb ? ` · ${maxMb}MB per file` : ''}</p>
           </label>
 
-          {/* File terpilih + progress */}
-          {file && (
-            <div className="up-file-row">
-              <div className="up-file-head">
-                <span className="up-file-name">
-                  <span className="up-file-type">{getFileTypeBadge(file.type, file.name)}</span>
-                  {file.name}
-                </span>
-                <span className={`up-file-pct ${progress === 100 && !loading ? '' : ''}`}>
-                  {loading ? `${progress}% (Uploading...)` : (progress === 100 ? 'Selesai' : formatBytes(file.size))}
-                </span>
-              </div>
-              <div className="up-progress"><div className="up-progress-fill" style={{ width: `${loading || progress ? progress : 0}%` }} /></div>
+          {/* Daftar file + progress per file */}
+          {items.length > 0 && (
+            <div className="up-file-list">
+              {items.map((it) => (
+                <div className="up-file-row" key={it.id}>
+                  <div className="up-file-head">
+                    <span className="up-file-name">
+                      <span className="up-file-type">{getFileTypeBadge(it.file.type, it.file.name)}</span>
+                      {it.file.name}
+                    </span>
+                    <span className={`up-file-pct ${it.status === 'error' ? 'up-file-pct--err' : ''}`}>{statusText(it)}</span>
+                    {!loading && it.status !== 'done' && (
+                      <button type="button" className="up-file-remove" onClick={() => removeItem(it.id)} title="Hapus dari daftar">✕</button>
+                    )}
+                  </div>
+                  <div className="up-progress"><div className="up-progress-fill" style={{ width: `${it.progress}%` }} /></div>
+                  {it.error && <div className="up-file-err">{it.error}</div>}
+                </div>
+              ))}
             </div>
           )}
 
-          {fileSizeError && <div className="modal-error">{fileSizeError}</div>}
-          {error && <div className="modal-error">{error}</div>}
+          {notice && <div className="modal-error">{notice}</div>}
+          {quotaExceeded && (
+            <div className="modal-error">
+              Kuota storage tidak cukup untuk semua file terpilih. Sisa ruang: {formatBytes(Math.max(0, storageLimitBytes - storageUsedBytes))}.
+            </div>
+          )}
 
           <div className="modal-actions">
-            <button type="button" className="modal-btn-cancel" onClick={onClose} disabled={loading}>Tutup</button>
-            <button type="submit" className="modal-btn-submit" disabled={loading || !file || !!fileSizeError}>
-              {loading ? 'Mengunggah...' : 'Mulai Unggah'}
+            <button type="button" className="modal-btn-cancel" onClick={onClose} disabled={loading}>
+              {doneCount > 0 ? 'Selesai' : 'Tutup'}
+            </button>
+            <button type="submit" className="modal-btn-submit" disabled={loading || uploadable.length === 0 || quotaExceeded}>
+              {loading ? 'Mengunggah...' : `Unggah${uploadable.length ? ` ${uploadable.length} File` : ''}`}
             </button>
           </div>
         </form>
@@ -243,7 +283,8 @@ function DeleteConfirmModal({ filename, onConfirm, onCancel, loading }) {
 
 /* ── Main Page ── */
 export default function BucketDetailPage() {
-  const { id } = useParams()
+  // Rute pakai nama bucket; dipakai sebagai identitas (unik per pengguna) di endpoint.
+  const { name: id } = useParams()
   const navigate = useNavigate()
   const [bucket, setBucket] = useState(null)
   const [objects, setObjects] = useState([])
@@ -582,6 +623,7 @@ export default function BucketDetailPage() {
           storageLimitBytes={usage?.storage_limit_bytes ?? 0}
           onClose={() => setShowUpload(false)}
           onSuccess={() => { setShowUpload(false); loadData() }}
+          onRefresh={() => loadData()}
         />
       )}
 

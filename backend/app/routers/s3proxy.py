@@ -19,7 +19,8 @@ from sqlalchemy.orm import Session
 
 from app.core import usage as usage_helper
 from app.core.activity import log_activity
-from app.core.ministack import download_object, delete_object, upload_object
+from app.core.iam import authorize
+from app.core.ministack import download_object, delete_object, upload_object, ensure_object_exists, get_s3_client
 from app.core.security import verify_password
 from app.database import get_db
 from app.models.access_key import AccessKey, KeyPermission, KeyStatus
@@ -93,6 +94,24 @@ def _require_write(ctx: KeyContext) -> None:
         )
 
 
+def _authorize(ctx: KeyContext, action: str, resource: str, *, write: bool = False) -> None:
+    """
+    Otorisasi sebuah operasi. Jika kunci punya IAM policy → policy yang memutuskan
+    (menggantikan enum permission). Jika tidak → fallback ke permission lama
+    (read_only memblok tulis; baca selalu boleh).
+    """
+    pol = ctx.key.policy
+    if pol is not None:
+        if not authorize(pol.document, action, resource):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Akses ditolak oleh IAM policy '{pol.name}' untuk {action} pada '{resource}'.",
+            )
+        return
+    if write:
+        _require_write(ctx)
+
+
 def _resolve_bucket(db: Session, user_id: int, name: str) -> StorageBucket:
     """Isolasi: hanya bucket milik pemilik kunci yang bisa di-resolve."""
     b = db.query(StorageBucket).filter(
@@ -110,6 +129,7 @@ def _resolve_bucket(db: Session, user_id: int, name: str) -> StorageBucket:
 
 @router.get("/buckets")
 def proxy_list_buckets(ctx: KeyContext = Depends(get_key_ctx), db: Session = Depends(get_db)):
+    _authorize(ctx, "s3:ListBucket", "*")
     buckets = (
         db.query(StorageBucket)
         .filter(StorageBucket.user_id == ctx.key.user_id, StorageBucket.status == BucketStatus.active)
@@ -124,6 +144,7 @@ def proxy_list_buckets(ctx: KeyContext = Depends(get_key_ctx), db: Session = Dep
 
 @router.get("/buckets/{bucket}/objects")
 def proxy_list_objects(bucket: str, ctx: KeyContext = Depends(get_key_ctx), db: Session = Depends(get_db)):
+    _authorize(ctx, "s3:ListBucket", bucket)
     b = _resolve_bucket(db, ctx.key.user_id, bucket)
     objs = db.query(StorageObject).filter(
         StorageObject.bucket_id == b.id, StorageObject.status == ObjectStatus.available,
@@ -138,6 +159,7 @@ def proxy_list_objects(bucket: str, ctx: KeyContext = Depends(get_key_ctx), db: 
 @router.get("/buckets/{bucket}/objects/{object_key:path}")
 def proxy_download(bucket: str, object_key: str,
                    ctx: KeyContext = Depends(get_key_ctx), db: Session = Depends(get_db)):
+    _authorize(ctx, "s3:GetObject", f"{bucket}/{object_key}")
     b = _resolve_bucket(db, ctx.key.user_id, bucket)
     obj = db.query(StorageObject).filter(
         StorageObject.bucket_id == b.id,
@@ -146,6 +168,7 @@ def proxy_download(bucket: str, object_key: str,
     ).first()
     if not obj:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Objek tidak ditemukan.")
+    ensure_object_exists(get_s3_client(), b.internal_name, obj.object_key, obj.content_type)
     stream = download_object(b.internal_name, obj.object_key)
     return StreamingResponse(
         stream,
@@ -157,7 +180,7 @@ def proxy_download(bucket: str, object_key: str,
 @router.put("/buckets/{bucket}/objects/{object_key:path}")
 async def proxy_put(bucket: str, object_key: str, request: Request,
                     ctx: KeyContext = Depends(get_key_ctx), db: Session = Depends(get_db)):
-    _require_write(ctx)
+    _authorize(ctx, "s3:PutObject", f"{bucket}/{object_key}", write=True)
     sub = ctx.sub
     if sub.status == SubscriptionStatus.over_quota:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Kuota terlampaui (OVER_QUOTA).")
@@ -226,7 +249,7 @@ async def proxy_put(bucket: str, object_key: str, request: Request,
 @router.delete("/buckets/{bucket}/objects/{object_key:path}")
 def proxy_delete(bucket: str, object_key: str,
                  ctx: KeyContext = Depends(get_key_ctx), db: Session = Depends(get_db)):
-    _require_write(ctx)
+    _authorize(ctx, "s3:DeleteObject", f"{bucket}/{object_key}", write=True)
     b = _resolve_bucket(db, ctx.key.user_id, bucket)
     obj = db.query(StorageObject).filter(
         StorageObject.bucket_id == b.id,

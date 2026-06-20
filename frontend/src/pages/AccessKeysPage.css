@@ -37,6 +37,7 @@
 .ak-badge { font-size: 12px; font-family: var(--font-ui); font-weight: 500; padding: 3px 12px; border-radius: var(--radius-full); white-space: nowrap; }
 .ak-badge--active { color: #16a34a; }
 .ak-badge--revoked { background: #f3f4f6; color: #9ca3af; }
+.ak-badge--policy { background: #ecfdf3; color: #15803d; border: 1px solid #bbf7d0; padding: 2px 8px; }
 
 .ak-revoke { font-size: 13px; font-weight: 600; font-family: var(--font-ui); color: #dc2626; }
 .ak-revoke:hover { text-decoration: underline; }

@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
+import { parseUTC } from '../utils/datetime'
 import { useParams, useNavigate } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import PinPromptModal from '../components/PinPromptModal'
-import { getSite, deploySite, rollbackDeployment, deleteSite, deleteDeployment } from '../services/hosting'
+import { getSite, deploySite, rollbackDeployment, deleteSite, deleteDeployment, deactivateSite, activateSite, getHostingUsage } from '../services/hosting'
 import { getPinErrorCode } from '../services/security'
 import './SiteDetailPage.css'
 
@@ -23,24 +24,37 @@ function formatBytes(bytes) {
 }
 function formatDate(dateStr) {
   if (!dateStr) return '-'
-  const d = new Date(dateStr)
+  const d = parseUTC(dateStr)
   const t = d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
   const date = d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
   return `${t} · ${date}`
 }
 
 /* ── Deploy Modal (upload ZIP) ── */
-function DeployModal({ siteId, onClose, onSuccess }) {
+const HARD_CAP_BYTES = 300 * 1024 * 1024 // batas keras backend (uncompressed)
+
+function DeployModal({ siteId, buildLimitBytes, onClose, onSuccess }) {
   const [file, setFile] = useState(null)
   const [prefix, setPrefix] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [dragging, setDragging] = useState(false)
 
+  // Batas yang dipakai untuk validasi dini: kapasitas build paket (atau batas keras).
+  // ZIP terkompresi pasti <= ukuran terekstrak, jadi kalau ZIP saja sudah melebihi
+  // limit, dipastikan gagal → tolak sejak file dipilih (tanpa menunggu klik Unggah).
+  const sizeLimit = buildLimitBytes ? Math.min(buildLimitBytes, HARD_CAP_BYTES) : HARD_CAP_BYTES
+
   function pick(f) {
     if (!f) return
     if (!f.name.toLowerCase().endsWith('.zip')) {
       setError('File harus berformat .zip')
+      setFile(null)
+      return
+    }
+    if (f.size > sizeLimit) {
+      setError(`Ukuran ZIP ${formatBytes(f.size)} melebihi kapasitas build paket Anda (${formatBytes(sizeLimit)}). Kurangi isi atau upgrade paket.`)
+      setFile(null)
       return
     }
     setError('')
@@ -70,7 +84,7 @@ function DeployModal({ siteId, onClose, onSuccess }) {
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
         <form onSubmit={handleSubmit}>
-          <p className="deploy-desc">Upload file ZIP berisi build website Anda (harus ada <code>index.html</code>).</p>
+          <p className="deploy-desc">Upload file ZIP berisi build website Anda (harus ada <code>index.html</code>). Maksimal <strong>{formatBytes(sizeLimit)}</strong>.</p>
 
           <label
             className={`deploy-drop ${dragging ? 'deploy-drop--active' : ''} ${file ? 'deploy-drop--has' : ''}`}
@@ -116,9 +130,11 @@ function DeployModal({ siteId, onClose, onSuccess }) {
 }
 
 export default function SiteDetailPage() {
-  const { id } = useParams()
+  // Rute pakai slug situs (unik global) sebagai identitas di endpoint.
+  const { slug: id } = useParams()
   const navigate = useNavigate()
   const [site, setSite] = useState(null)
+  const [buildLimit, setBuildLimit] = useState(0)
   const [loading, setLoading] = useState(true)
   const [showDeploy, setShowDeploy] = useState(false)
   const [rollbackTarget, setRollbackTarget] = useState(null)
@@ -140,6 +156,22 @@ export default function SiteDetailPage() {
   }
 
   useEffect(() => { loadData().finally(() => setLoading(false)) }, [id])
+  useEffect(() => {
+    getHostingUsage().then((r) => setBuildLimit(r.data?.build_limit_bytes || 0)).catch(() => {})
+  }, [])
+
+  async function toggleActive() {
+    setBusy(true)
+    try {
+      if (site.status === 'active') await deactivateSite(id)
+      else await activateSite(id)
+      await loadData()
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Gagal mengubah status situs')
+    } finally {
+      setBusy(false)
+    }
+  }
 
   async function confirmRollback() {
     setBusy(true)
@@ -202,24 +234,46 @@ export default function SiteDetailPage() {
             <div className="site-title-row">
               <h1 className="site-name-title">{site.site_name}</h1>
               <span className={`site-status site-status--${site.status}`}>
-                {site.status === 'active' ? 'Aktif' : site.status}
+                {site.status === 'active' ? 'Aktif' : site.status === 'suspended' ? 'Nonaktif' : site.status}
               </span>
             </div>
             <a href={site.url} target="_blank" rel="noreferrer" className="site-detail-url">{site.url} ↗</a>
           </div>
           <div className="site-header-actions">
             <button className="btn-danger-outline" onClick={() => setShowDelete(true)}>Hapus Situs</button>
+            {site.status === 'active' ? (
+              <button className="btn-outline" onClick={toggleActive} disabled={busy}
+                title="Buat situs offline sementara (pengunjung melihat halaman tidak aktif)">
+                {busy ? '...' : 'Nonaktifkan'}
+              </button>
+            ) : site.status === 'suspended' ? (
+              <button className="btn-outline" onClick={toggleActive} disabled={busy}
+                title="Aktifkan kembali agar situs online">
+                {busy ? '...' : 'Aktifkan'}
+              </button>
+            ) : null}
             <a href={site.url} target="_blank" rel="noreferrer" className="btn-outline">Buka Situs</a>
             <button
               className="btn-primary-dark"
               onClick={() => setShowDeploy(true)}
-              disabled={site.dormant}
-              title={site.dormant ? 'Situs dorman — tidak bisa deploy' : 'Deploy versi baru'}
+              disabled={site.dormant || site.status !== 'active'}
+              title={
+                site.status !== 'active' ? 'Aktifkan situs dulu untuk deploy'
+                : site.dormant ? 'Situs dorman — tidak bisa deploy'
+                : 'Deploy versi baru'
+              }
             >
               Deploy Versi Baru
             </button>
           </div>
         </div>
+
+        {site.status === 'suspended' && (
+          <div className="site-dormant-banner">
+            ⏸ Situs ini <strong>dinonaktifkan</strong> — pengunjung melihat halaman "tidak aktif" dan
+            deploy dimatikan. Klik <strong>Aktifkan</strong> untuk membuatnya online kembali.
+          </div>
+        )}
 
         {site.dormant && (
           <div className="site-dormant-banner">
@@ -316,7 +370,7 @@ export default function SiteDetailPage() {
       </footer>
 
       {showDeploy && (
-        <DeployModal siteId={id} onClose={() => setShowDeploy(false)} onSuccess={() => { setShowDeploy(false); loadData() }} />
+        <DeployModal siteId={id} buildLimitBytes={buildLimit} onClose={() => setShowDeploy(false)} onSuccess={() => { setShowDeploy(false); loadData() }} />
       )}
 
       {rollbackTarget && (

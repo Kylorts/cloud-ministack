@@ -4,6 +4,9 @@ import { pinHeader } from './security'
 export const getMySubscription = (category = 'storage') =>
   api.get('/subscriptions/me', { params: { category } })
 export const subscribe = (planId) => api.post('/subscriptions', { plan_id: planId })
+export const scheduleDowngrade = (planId) => api.post('/subscriptions/schedule-downgrade', { plan_id: planId })
+export const cancelScheduled = (category = 'storage') =>
+  api.delete('/subscriptions/scheduled', { params: { category } })
 export const cancelSubscription = (category = 'storage', pin) =>
   api.delete('/subscriptions/me', { params: { category }, ...pinHeader(pin) })
 

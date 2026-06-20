@@ -38,6 +38,10 @@ class Subscription(Base):
     plan_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("service_plans.id"), nullable=False
     )
+    # Downgrade terjadwal: paket tujuan yang berlaku di current_period_end
+    scheduled_plan_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("service_plans.id"), nullable=True
+    )
     category: Mapped[str] = mapped_column(
         String(20), nullable=False, default="storage", index=True
     )
@@ -58,4 +62,11 @@ class Subscription(Base):
     )
 
     user: Mapped["User"] = relationship(back_populates="subscription")
-    plan: Mapped["ServicePlan"] = relationship(back_populates="subscriptions")
+    plan: Mapped["ServicePlan"] = relationship(back_populates="subscriptions", foreign_keys=[plan_id])
+    scheduled_plan: Mapped["ServicePlan | None"] = relationship(
+        "ServicePlan", foreign_keys=[scheduled_plan_id]
+    )
+
+    @property
+    def scheduled_plan_name(self) -> str | None:
+        return self.scheduled_plan.name if self.scheduled_plan else None

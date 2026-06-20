@@ -43,4 +43,6 @@ class ServicePlan(Base):
         DateTime, nullable=False, server_default=func.now(), onupdate=func.now()
     )
 
-    subscriptions: Mapped[list["Subscription"]] = relationship(back_populates="plan")
+    subscriptions: Mapped[list["Subscription"]] = relationship(
+        back_populates="plan", foreign_keys="Subscription.plan_id"
+    )

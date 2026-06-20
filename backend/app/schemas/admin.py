@@ -31,6 +31,9 @@ class AdminAccessKeyItem(BaseModel):
     owner_name: str
     status: str
     category: str
+    permission: str = "full"
+    policy_name: str | None = None
+    last_used_at: datetime | None = None
     created_at: datetime
 
 
@@ -145,6 +148,8 @@ class AdminSubscriptionDetail(BaseModel):
     price: float
     current_period_start: datetime
     current_period_end: datetime
+    grace_until: datetime | None = None
+    suspended_at: datetime | None = None
     storage_used_bytes: int
     storage_limit_bytes: int
     bandwidth_used_bytes: int
@@ -226,3 +231,44 @@ class AdminSiteRow(BaseModel):
     url: str
     last_deployed_at: datetime | None
     status: str
+
+
+# ── Fase G: Keamanan & Log Sistem ──
+class AdminLogItem(BaseModel):
+    id: int
+    actor_type: str
+    actor_name: str
+    action: str
+    target: str
+    ip_address: str | None
+    created_at: datetime
+
+
+class AdminLogPage(BaseModel):
+    items: list[AdminLogItem]
+    total: int
+
+
+class AdminAuditItem(BaseModel):
+    id: int
+    admin_name: str
+    affected: str
+    action: str
+    note: str
+    created_at: datetime
+
+
+class IamPolicyItem(BaseModel):
+    id: int
+    name: str
+    description: str | None
+    policy_type: str
+    document: str
+    created_by: str | None
+    created_at: datetime
+
+
+class IamPolicyWrite(BaseModel):
+    name: str
+    description: str | None = None
+    document: str

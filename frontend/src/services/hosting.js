@@ -6,6 +6,8 @@ export const getSites = () => api.get('/hosting/sites')
 export const createSite = (siteName) => api.post('/hosting/sites', { site_name: siteName })
 export const getSite = (id) => api.get(`/hosting/sites/${id}`)
 export const deleteSite = (id, pin) => api.delete(`/hosting/sites/${id}`, pinHeader(pin))
+export const deactivateSite = (id) => api.post(`/hosting/sites/${id}/deactivate`)
+export const activateSite = (id) => api.post(`/hosting/sites/${id}/activate`)
 
 export const deploySite = (siteId, file, prefix = '') => {
   const formData = new FormData()

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { parseUTC } from '../utils/datetime'
 import { useNavigate } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import DormantNotice from '../components/DormantNotice'
@@ -25,16 +26,33 @@ function formatBytes(bytes) {
 
 function formatDate(dateStr) {
   if (!dateStr) return '-'
-  const d = new Date(dateStr)
+  const d = parseUTC(dateStr)
   const t = d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
   return `${d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}, ${t} WIB`
 }
 
 /* ── Modal Buat Situs ── */
+function validateSiteName(val) {
+  if (!val) return ''
+  if (val.length < 3) return 'Nama situs minimal 3 karakter'
+  if (val.length > 63) return 'Nama situs maksimal 63 karakter'
+  if (val.startsWith('-')) return 'Tidak boleh diawali tanda hubung (-)'
+  if (val.endsWith('-')) return 'Tidak boleh diakhiri tanda hubung (-)'
+  return ''
+}
+
 function CreateSiteModal({ onClose, onSuccess }) {
   const [name, setName] = useState('')
+  const [nameError, setNameError] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  function handleNameChange(e) {
+    // Hanya karakter yang valid untuk URL situs: huruf kecil, angka, tanda hubung.
+    const val = e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 63)
+    setName(val)
+    setNameError(validateSiteName(val))
+  }
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -62,19 +80,21 @@ function CreateSiteModal({ onClose, onSuccess }) {
           <div className="modal-field">
             <label className="modal-label">Nama Situs</label>
             <input
-              className="modal-input"
+              className={`modal-input ${nameError ? 'modal-input--error' : name.length >= 3 ? 'modal-input--valid' : ''}`}
               type="text"
-              placeholder="Contoh: Portofolio Saya"
+              placeholder="contoh: portofolio-saya"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={handleNameChange}
               required
             />
-            <span className="modal-hint">URL akan dibuat otomatis dari nama situs (slug).</span>
+            {nameError
+              ? <span className="modal-hint modal-hint--error">⚠ {nameError}</span>
+              : <span className="modal-hint">3–63 karakter. Huruf kecil, angka, dan tanda hubung (-). Dipakai langsung sebagai URL situs.</span>}
           </div>
           {error && <div className="modal-error">{error}</div>}
           <div className="modal-actions">
             <button type="button" className="modal-btn-cancel" onClick={onClose}>Batal</button>
-            <button type="submit" className="modal-btn-submit" disabled={loading || name.trim().length < 1}>
+            <button type="submit" className="modal-btn-submit" disabled={loading || !!nameError || name.length < 3}>
               {loading ? 'Membuat...' : 'Buat Situs'}
             </button>
           </div>
@@ -157,12 +177,23 @@ export default function HostingPage() {
           <div className="hosting-warning-banner">
             ⚠ Kuota hosting terlampaui (OVER_QUOTA). Anda masih bisa melihat & menghapus,
             tetapi <strong>tidak bisa membuat situs / deploy baru</strong>.
+            {usage.grace_until && (
+              <> Rapikan sebelum <strong>{parseUTC(usage.grace_until).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</strong> atau langganan akan di-<strong>suspend</strong> (situs offline).</>
+            )}
             {' '}<a href="/paket?kategori=hosting" className="hosting-warning-link">Upgrade paket</a> atau kurangi pemakaian.
           </div>
         )}
         {usage?.subscription_status === 'suspended' && (
           <div className="hosting-warning-banner">
-            Langganan hosting Anda disuspend. Layanan dibatasi sementara.
+            ⛔ Langganan hosting Anda <strong>disuspend</strong> (grace period habis). Semua situs Anda
+            <strong> offline (503)</strong> dan deploy baru dinonaktifkan. Hubungi admin untuk memulihkan.
+          </div>
+        )}
+        {bwLimit > 0 && bwUsed >= bwLimit && (
+          <div className="hosting-warning-banner">
+            ⛔ <strong>Kuota bandwidth bulan ini habis.</strong> Situs Anda berhenti tayang (HTTP 429)
+            sampai periode berikutnya atau Anda upgrade paket.
+            {' '}<a href="/paket?kategori=hosting" className="hosting-warning-link">Upgrade paket</a>.
           </div>
         )}
         {sites.some((s) => s.dormant) && (
@@ -215,12 +246,12 @@ export default function HostingPage() {
                   {site.dormant
                     ? <span className="site-status site-status--dormant" title="Melebihi batas jumlah situs paket — terkunci dari deploy">Dorman</span>
                     : <span className={`site-status site-status--${site.status}`}>
-                        {site.status === 'active' ? 'Aktif' : site.status === 'suspended' ? 'Ditangguhkan' : site.status}
+                        {site.status === 'active' ? 'Aktif' : site.status === 'suspended' ? 'Nonaktif' : site.status}
                       </span>}
                 </td>
                 <td className="hosting-table-meta">{site.last_deployed_at ? formatDate(site.last_deployed_at) : 'Belum deploy'}</td>
                 <td>
-                  <button className="site-open-btn" onClick={() => navigate(`/hosting/sites/${site.id}`)}>Kelola</button>
+                  <button className="site-open-btn" onClick={() => navigate(`/hosting/sites/${site.slug}`)}>Kelola</button>
                 </td>
               </tr>
             ))}

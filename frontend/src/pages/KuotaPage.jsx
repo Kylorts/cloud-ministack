@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { parseUTC } from '../utils/datetime'
 import Navbar from '../components/Navbar'
 import { getMySubscription } from '../services/subscriptions'
 import { getBuckets, getStorageUsage } from '../services/storage'
@@ -16,7 +17,7 @@ function formatBytes(bytes) {
 
 function formatDate(dateStr) {
   if (!dateStr) return '-'
-  return new Date(dateStr).toLocaleDateString('id-ID', {
+  return parseUTC(dateStr).toLocaleDateString('id-ID', {
     day: 'numeric', month: 'long', year: 'numeric',
   })
 }
