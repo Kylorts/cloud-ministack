@@ -1,0 +1,51 @@
+.pinmodal-overlay {
+  position: fixed; inset: 0; background: rgba(6, 47, 40, 0.45);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 1000; padding: 20px; backdrop-filter: blur(2px);
+}
+.pinmodal {
+  background: #fff; border-radius: var(--radius-lg, 18px);
+  padding: 32px 28px; width: 100%; max-width: 400px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+}
+.pinmodal-icon {
+  width: 56px; height: 56px; border-radius: 50%;
+  background: rgba(159, 232, 112, 0.25); color: var(--color-dark, #062F28);
+  display: flex; align-items: center; justify-content: center; margin-bottom: 16px;
+}
+.pinmodal-title {
+  font-family: var(--font-display, sans-serif); font-size: 20px; font-weight: 700;
+  color: var(--color-dark, #062F28); margin-bottom: 6px;
+}
+.pinmodal-desc {
+  font-size: 13px; font-family: var(--font-ui, sans-serif); color: #6b7280;
+  margin-bottom: 22px; line-height: 1.5;
+}
+.pinmodal-error {
+  margin-top: 14px; font-size: 13px; font-weight: 500; color: #dc2626;
+  background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px;
+  padding: 8px 12px; width: 100%; font-family: var(--font-ui, sans-serif);
+}
+.pinmodal-submit {
+  margin-top: 22px; width: 100%; padding: 12px;
+  background: var(--color-dark, #062F28); color: #fff;
+  border: none; border-radius: var(--radius-md, 12px);
+  font-size: 14px; font-weight: 600; font-family: var(--font-ui, sans-serif);
+  cursor: pointer; transition: opacity 0.15s;
+}
+.pinmodal-submit:hover:not(:disabled) { opacity: 0.9; }
+.pinmodal-submit:disabled { opacity: 0.5; cursor: default; }
+.pinmodal-cancel {
+  margin-top: 10px; width: 100%; padding: 11px;
+  background: #fff; color: #374151; border: 1px solid #d1d5db;
+  border-radius: var(--radius-md, 12px); font-size: 14px; font-weight: 600;
+  font-family: var(--font-ui, sans-serif); cursor: pointer;
+}
+.pinmodal-cancel:hover:not(:disabled) { background: #f9fafb; }
+.pinmodal-forgot {
+  margin-top: 16px; background: none; border: none; cursor: pointer;
+  font-size: 12px; color: #6b7280; font-family: var(--font-ui, sans-serif);
+  text-decoration: underline;
+}
+.pinmodal-forgot:hover { color: var(--color-dark, #062F28); }

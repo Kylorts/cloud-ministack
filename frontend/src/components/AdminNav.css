@@ -1,0 +1,45 @@
+/* Breadcrumb in admin top nav */
+.adm-breadcrumb { display: flex; align-items: center; gap: 4px; margin-left: 8px; }
+.adm-bc-item { display: flex; align-items: center; gap: 4px; }
+.adm-bc-sep { color: var(--color-gray-light); font-size: 14px; }
+.adm-bc-link { font-size: 13px; font-family: var(--font-ui); color: var(--color-gray); }
+.adm-bc-link:hover { color: var(--color-dark); }
+.adm-bc-current { font-size: 13px; font-weight: 700; font-family: var(--font-ui); color: var(--color-dark); }
+@media (max-width: 640px) { .adm-breadcrumb { display: none; } }
+
+/* Sidebar */
+.adm-sb-overlay {
+  position: fixed; inset: 0; background: rgba(6,47,40,0.45); z-index: 300;
+  opacity: 0; pointer-events: none; transition: opacity 0.2s;
+}
+.adm-sb-overlay--show { opacity: 1; pointer-events: auto; }
+.adm-sidebar {
+  position: fixed; top: 0; left: 0; height: 100%; width: 270px; z-index: 310;
+  background: var(--color-dark); color: #fff;
+  transform: translateX(-100%); transition: transform 0.25s ease;
+  display: flex; flex-direction: column;
+}
+.adm-sidebar--open { transform: translateX(0); }
+.adm-sidebar-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 20px 20px; border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+.adm-sidebar-brand { font-family: var(--font-display); font-weight: 700; font-size: 18px; letter-spacing: 0.06em; color: #fff; }
+.adm-sidebar-close { background: none; border: none; cursor: pointer; display: flex; }
+.adm-sidebar-nav { flex: 1; padding: 16px 12px; display: flex; flex-direction: column; gap: 4px; }
+.adm-sidebar-link {
+  display: flex; align-items: center; gap: 12px; padding: 11px 14px; border-radius: var(--radius-md);
+  font-size: 14px; font-family: var(--font-ui); font-weight: 600;
+  color: rgba(255,255,255,0.7); transition: background 0.15s, color 0.15s;
+}
+.adm-sidebar-link:hover { background: rgba(255,255,255,0.08); color: #fff; }
+.adm-sidebar-link--active { background: var(--color-accent); color: var(--color-dark); }
+.adm-sidebar-link--soon { color: rgba(255,255,255,0.35); cursor: default; }
+.adm-sidebar-link--soon:hover { background: none; color: rgba(255,255,255,0.35); }
+.adm-soon-tag {
+  margin-left: auto; font-size: 9px; font-weight: 700; letter-spacing: 0.04em;
+  text-transform: uppercase; background: rgba(255,255,255,0.12); color: rgba(255,255,255,0.6);
+  padding: 2px 6px; border-radius: var(--radius-full);
+}
+.adm-sidebar-footer { padding: 16px 20px; border-top: 1px solid rgba(255,255,255,0.1); }
+.adm-sidebar-role { font-size: 12px; color: rgba(255,255,255,0.5); font-family: var(--font-ui); }

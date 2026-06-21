@@ -1,9 +1,46 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 
 
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
+
+
+class RegisterRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    email: EmailStr
+    password: str = Field(min_length=8, max_length=128)
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(min_length=1)
+    new_password: str = Field(min_length=8, max_length=128)
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(min_length=10)
+    new_password: str = Field(min_length=8, max_length=128)
+
+
+class SetPinRequest(BaseModel):
+    password: str = Field(min_length=1)
+    pin: str = Field(min_length=6, max_length=6)
+
+
+class RemovePinRequest(BaseModel):
+    password: str = Field(min_length=1)
+
+
+class VerifyPinRequest(BaseModel):
+    pin: str = Field(min_length=6, max_length=6)
+
+
+class PinStatusResponse(BaseModel):
+    has_pin: bool
 
 
 class TokenResponse(BaseModel):

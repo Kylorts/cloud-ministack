@@ -1,0 +1,34 @@
+/* Form registrasi — input hijau muda sesuai desain */
+.reg-form { display: flex; flex-direction: column; gap: 18px; }
+
+.reg-group { display: flex; flex-direction: column; gap: 7px; }
+.reg-label {
+  font-size: 13px; font-weight: 600; font-family: var(--font-ui);
+  color: var(--color-dark);
+}
+.reg-input-wrap { position: relative; display: flex; align-items: center; }
+.reg-input {
+  width: 100%;
+  background: var(--color-input-bg, #DFF0DA);
+  border: 1px solid var(--color-input-border, #C8E4C2);
+  border-radius: var(--radius-md, 12px);
+  padding: 13px 15px;
+  font-size: 14px; font-family: var(--font-ui);
+  color: var(--color-dark); outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.reg-input::placeholder { color: #6b8a73; opacity: 0.7; }
+.reg-input:focus {
+  border-color: var(--color-dark);
+  box-shadow: 0 0 0 3px rgba(159, 232, 112, 0.35);
+}
+.reg-input-wrap .reg-input { padding-right: 44px; }
+.reg-eye {
+  position: absolute; right: 12px; background: none; border: none;
+  cursor: pointer; display: flex; align-items: center; padding: 4px;
+}
+
+.reg-terms {
+  font-size: 11.5px; font-family: var(--font-ui); color: #9ca3af;
+  line-height: 1.5; margin-top: -4px;
+}

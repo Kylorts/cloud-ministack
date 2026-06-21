@@ -16,6 +16,29 @@ services:
       timeout: 5s
       retries: 10
 
+  ministack:
+    image: ministackorg/ministack
+    ports:
+      - "4566:4566"
+    environment:
+      PERSIST_STATE: "1"
+    volumes:
+      - ministack_data:/var/lib/ministack
+      - ministack_tmp:/tmp/ministack
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:4566/_ministack/health')\" 2>/dev/null || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 15
+      start_period: 60s
+
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "8025:8025"   # web inbox
+      - "1025:1025"   # SMTP
+    restart: unless-stopped
+
   backend:
     build: ./backend
     ports:
@@ -28,11 +51,24 @@ services:
       DB_NAME: iniawan
       JWT_SECRET_KEY: changeme-super-secret-key-for-iniawan-2026
       JWT_ALGORITHM: HS256
-      JWT_EXPIRE_MINUTES: 60
+      JWT_EXPIRE_MINUTES: 1440
       CORS_ORIGINS: http://localhost:81
+      MINISTACK_ENDPOINT: http://ministack:4566
+      MINISTACK_ACCESS_KEY: test
+      MINISTACK_SECRET_KEY: test
+      MINISTACK_REGION: us-east-1
+      SMTP_HOST: mailpit
+      SMTP_PORT: 1025
+      SMTP_FROM: no-reply@iniawan.id
+      SMTP_FROM_NAME: JadeStack
+      APP_BASE_URL: http://localhost:81
     depends_on:
       db:
         condition: service_healthy
+      ministack:
+        condition: service_started
+      mailpit:
+        condition: service_started
 
   frontend:
     build:
@@ -46,3 +82,5 @@ services:
 
 volumes:
   db_data:
+  ministack_data:
+  ministack_tmp:
