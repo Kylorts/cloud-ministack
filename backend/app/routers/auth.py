@@ -1,25 +1,66 @@
+import hashlib
+import secrets
+from datetime import datetime, timedelta
+
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.core.activity import log_activity
 from app.core.deps import get_current_user
+from app.core.email import reset_email_html, send_email
 from app.core.pin import require_pin, validate_pin_format
 from app.core.security import create_access_token, hash_password, verify_password
 from app.database import get_db
+from app.models.password_reset import PasswordReset
+from app.models.plan import PlanCategory, ServicePlan
+from app.models.subscription import Subscription, SubscriptionStatus
 from app.models.user import User, UserRole, UserStatus
 from app.schemas.auth import (
     ChangePasswordRequest,
+    ForgotPasswordRequest,
     LoginRequest,
     LoginResponse,
     PinStatusResponse,
     RegisterRequest,
     RemovePinRequest,
+    ResetPasswordRequest,
     SetPinRequest,
     UserPublic,
     VerifyPinRequest,
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+def _enroll_free_tier(db: Session, user_id: int) -> None:
+    """Aktifkan tier Free (Rp0) untuk storage & hosting bagi akun baru.
+
+    Mirip AWS Free Tier: akun langsung punya baseline gratis tanpa harus
+    memilih paket dulu. Tidak menggagalkan registrasi bila paket Free tak ada.
+    """
+    now = datetime.utcnow()
+    for category in (PlanCategory.storage, PlanCategory.hosting):
+        plan = (
+            db.query(ServicePlan)
+            .filter(
+                ServicePlan.category == category,
+                ServicePlan.price == 0,
+                ServicePlan.is_active.is_(True),
+            )
+            .order_by(ServicePlan.id.asc())
+            .first()
+        )
+        if not plan:
+            continue
+        db.add(Subscription(
+            user_id=user_id,
+            plan_id=plan.id,
+            category=category.value,
+            status=SubscriptionStatus.active,
+            current_period_start=now,
+            current_period_end=now + timedelta(days=30),
+        ))
 
 
 @router.post("/login", response_model=LoginResponse)
@@ -61,6 +102,91 @@ def login(body: LoginRequest, request: Request, db: Session = Depends(get_db)):
     )
 
 
+# ──────────────── Lupa / reset kata sandi (via email) ────────────────
+def _hash_token(raw: str) -> str:
+    return hashlib.sha256(raw.encode()).hexdigest()
+
+
+_GENERIC_FORGOT = {
+    "message": "Jika email terdaftar, tautan untuk mengatur ulang kata sandi telah dikirim."
+}
+
+
+@router.post("/forgot-password")
+def forgot_password(body: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    email = str(body.email).lower().strip()
+    user = db.query(User).filter(User.email == email).first()
+    # Respons selalu generik → tak bisa dipakai menebak email terdaftar (enumeration).
+    if user is None or user.status != UserStatus.active:
+        return _GENERIC_FORGOT
+
+    # Batalkan token lama yang belum dipakai, lalu buat satu yang baru.
+    db.query(PasswordReset).filter(
+        PasswordReset.user_id == user.id, PasswordReset.used_at.is_(None)
+    ).delete(synchronize_session=False)
+
+    raw = secrets.token_urlsafe(32)
+    db.add(PasswordReset(
+        user_id=user.id,
+        token_hash=_hash_token(raw),
+        expires_at=datetime.utcnow() + timedelta(minutes=settings.RESET_TOKEN_TTL_MINUTES),
+    ))
+    db.commit()
+
+    link = f"{settings.APP_BASE_URL}/reset-sandi?token={raw}"
+    try:
+        send_email(
+            user.email,
+            "Atur ulang kata sandi JadeStack",
+            reset_email_html(user.name, link, settings.RESET_TOKEN_TTL_MINUTES),
+        )
+    except Exception:
+        # Kegagalan kirim email tak boleh bocor ke klien (info & UX).
+        pass
+
+    log_activity(
+        db, actor_user_id=user.id, action="PASSWORD_RESET_REQUESTED",
+        description="Meminta tautan reset kata sandi", commit=True,
+    )
+    return _GENERIC_FORGOT
+
+
+@router.post("/reset-password")
+def reset_password(body: ResetPasswordRequest, db: Session = Depends(get_db)):
+    pr = (
+        db.query(PasswordReset)
+        .filter(PasswordReset.token_hash == _hash_token(body.token),
+                PasswordReset.used_at.is_(None))
+        .first()
+    )
+    if pr is None or pr.expires_at < datetime.utcnow():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tautan reset tidak valid atau telah kedaluwarsa.",
+        )
+
+    user = db.get(User, pr.user_id)
+    if user is None or user.status != UserStatus.active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Akun tidak dapat diatur ulang.",
+        )
+
+    user.password_hash = hash_password(body.new_password)
+    now = datetime.utcnow()
+    # Tandai token ini + semua token lain user sebagai terpakai.
+    db.query(PasswordReset).filter(
+        PasswordReset.user_id == user.id, PasswordReset.used_at.is_(None)
+    ).update({"used_at": now}, synchronize_session=False)
+
+    log_activity(
+        db, actor_user_id=user.id, action="PASSWORD_RESET_COMPLETED",
+        description="Kata sandi berhasil diatur ulang", commit=False,
+    )
+    db.commit()
+    return {"message": "Kata sandi berhasil diperbarui. Silakan masuk."}
+
+
 @router.post("/register", response_model=LoginResponse, status_code=status.HTTP_201_CREATED)
 def register(body: RegisterRequest, request: Request, db: Session = Depends(get_db)):
     email = str(body.email).lower().strip()
@@ -79,6 +205,9 @@ def register(body: RegisterRequest, request: Request, db: Session = Depends(get_
     )
     db.add(user)
     db.flush()
+
+    # Akun baru langsung dapat tier Free (storage + hosting) — baseline gratis.
+    _enroll_free_tier(db, user.id)
 
     token = create_access_token({"sub": str(user.id), "role": user.role.value})
     log_activity(

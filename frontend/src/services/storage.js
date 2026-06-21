@@ -6,10 +6,10 @@ export const getStorageUsage = () => api.get('/storage/usage')
 
 // Buckets
 export const getBuckets = () => api.get('/storage/buckets')
-export const createBucket = (data) => api.post('/storage/buckets', data)
+export const createBucket = (data, pin) => api.post('/storage/buckets', data, pinHeader(pin))
 export const getBucket = (id) => api.get(`/storage/buckets/${id}`)
 export const deleteBucket = (id, pin) => api.delete(`/storage/buckets/${id}`, pinHeader(pin))
-export const emptyBucket = (id) => api.post(`/storage/buckets/${id}/empty`)
+export const emptyBucket = (id, pin) => api.post(`/storage/buckets/${id}/empty`, null, pinHeader(pin))
 
 // Objects
 export const getObjects = (bucketId) => api.get(`/storage/buckets/${bucketId}/objects`)
@@ -39,5 +39,5 @@ export const downloadFile = (bucketId, objectId, filename) =>
       window.URL.revokeObjectURL(url)
     })
 
-export const deleteFile = (bucketId, objectId) =>
-  api.delete(`/storage/buckets/${bucketId}/objects/${objectId}`)
+export const deleteFile = (bucketId, objectId, pin) =>
+  api.delete(`/storage/buckets/${bucketId}/objects/${objectId}`, pinHeader(pin))

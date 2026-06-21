@@ -2,30 +2,38 @@ import { useEffect, useState } from 'react'
 import { parseUTC } from '../utils/datetime'
 import AdminNav from '../components/AdminNav'
 import { getAdminHostingSites } from '../services/admin'
+import AdminPagination from '../components/AdminPagination'
 import './AdminDashboardPage.css'
 import './AdminPages.css'
+
+const PAGE_SIZE = 15
 
 function fmtWhen(s) {
   if (!s) return 'Belum deploy'
   const d = parseUTC(s)
   const today = new Date()
   const sameDay = d.toDateString() === today.toDateString()
-  if (sameDay) return `Hari ini, ${d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}`
+  if (sameDay) return `${d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} · Hari ini`
   return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
 export default function AdminHostingSitesPage() {
   const [rows, setRows] = useState([])
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [q, setQ] = useState('')
 
+  useEffect(() => { setPage(1) }, [q])
   useEffect(() => {
     const t = setTimeout(() => {
       setLoading(true)
-      getAdminHostingSites(q).then((r) => setRows(r.data)).catch(() => setRows([])).finally(() => setLoading(false))
+      getAdminHostingSites(q, { page, page_size: PAGE_SIZE })
+        .then((r) => { setRows(r.data.items); setTotal(r.data.total) })
+        .catch(() => { setRows([]); setTotal(0) }).finally(() => setLoading(false))
     }, 250)
     return () => clearTimeout(t)
-  }, [q])
+  }, [q, page])
 
   return (
     <div className="adm-page">
@@ -61,7 +69,7 @@ export default function AdminHostingSitesPage() {
               ))}
             </tbody>
           </table>
-          {!loading && <div className="adm-pagi"><span>Menampilkan {rows.length} situs</span></div>}
+          {!loading && <AdminPagination page={page} pageSize={PAGE_SIZE} total={total} onPage={setPage} label="situs" />}
         </div>
       </main>
     </div>

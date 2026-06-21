@@ -5,6 +5,7 @@ import Navbar from '../components/Navbar'
 import DormantNotice from '../components/DormantNotice'
 import { getBuckets, createBucket, deleteBucket, getStorageUsage } from '../services/storage'
 import { getMySubscription, getSubscriptionHistory, categoryState } from '../services/subscriptions'
+import { usePinPrompt } from '../utils/usePinPrompt'
 import './StoragePage.css'
 
 function PlusIcon() {
@@ -62,6 +63,7 @@ function CreateBucketModal({ onClose, onSuccess, currentBuckets, bucketLimit }) 
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [nameError, setNameError] = useState('')
+  const { run: runPin, pinModal } = usePinPrompt({ title: 'Buat Bucket', description: 'Masukkan PIN Transaksi untuk membuat bucket.' })
 
   function handleNameChange(e) {
     const val = e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '')
@@ -69,25 +71,17 @@ function CreateBucketModal({ onClose, onSuccess, currentBuckets, bucketLimit }) 
     setNameError(validateBucketName(val))
   }
 
-  async function handleSubmit(e) {
+  function handleSubmit(e) {
     e.preventDefault()
     setError('')
-    setLoading(true)
-    try {
-      await createBucket({ display_name: name, visibility })
-      onSuccess()
-    } catch (err) {
-      const detail = err.response?.data?.detail
-      if (Array.isArray(detail)) {
-        // FastAPI validation error → ambil pesan pertama
-        const msg = detail[0]?.msg || 'Data tidak valid'
-        setError(msg.replace('Value error, ', ''))
-      } else {
-        setError(typeof detail === 'string' ? detail : 'Gagal membuat bucket')
-      }
-    } finally {
-      setLoading(false)
-    }
+    runPin((pin) => createBucket({ display_name: name, visibility }, pin))
+      .then(() => onSuccess())
+      .catch((err) => {
+        if (err?.pinCancelled) return
+        const detail = err.response?.data?.detail
+        if (Array.isArray(detail)) setError((detail[0]?.msg || 'Data tidak valid').replace('Value error, ', ''))
+        else setError(typeof detail === 'string' ? detail : 'Gagal membuat bucket')
+      })
   }
 
   return (
@@ -138,6 +132,7 @@ function CreateBucketModal({ onClose, onSuccess, currentBuckets, bucketLimit }) 
           </div>
         </form>
       </div>
+      {pinModal}
     </div>
   )
 }
@@ -188,6 +183,16 @@ export default function StoragePage() {
   const storageFullFull = storagePercent >= 100
   const bucketLimit = usage?.bucket_limit ?? subscription?.plan?.bucket_limit ?? 0
   const bucketLimitReached = bucketLimit > 0 && buckets.length >= bucketLimit
+  const subStatus = usage?.subscription_status
+  const addBlocked = subStatus === 'over_quota' || subStatus === 'suspended'
+  const createDisabled = bucketLimitReached || addBlocked
+  const createTitle = subStatus === 'suspended'
+    ? 'Langganan disuspend — tidak bisa membuat bucket'
+    : subStatus === 'over_quota'
+      ? 'Kuota terlampaui (OVER_QUOTA) — tidak bisa membuat bucket'
+      : bucketLimitReached
+        ? `Batas ${bucketLimit} bucket tercapai — upgrade paket atau hapus bucket lain`
+        : 'Buat bucket baru'
 
   if (loading) return <div className="storage-loading">Memuat data storage...</div>
 
@@ -218,7 +223,7 @@ export default function StoragePage() {
             <h1 className="storage-title">Object Storage</h1>
             <p className="storage-subtitle">Kelola infrastruktur penyimpanan data cloud Anda dengan efisien.</p>
           </div>
-          <button className="btn-create-bucket" onClick={() => setShowModal(true)}>
+          <button className="btn-create-bucket" onClick={() => setShowModal(true)} disabled={createDisabled} title={createTitle}>
             <PlusIcon /> Buat Bucket
           </button>
         </div>

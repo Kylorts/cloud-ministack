@@ -272,7 +272,9 @@ def create_site(
     body: SiteCreateRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    x_transaction_pin: str | None = Header(default=None, alias="X-Transaction-PIN"),
 ):
+    require_pin(current_user, x_transaction_pin)
     sub = _get_active_hosting_sub(current_user.id, db)
     _require_can_add(sub)
 
@@ -351,33 +353,18 @@ def get_site(
     return detail
 
 
-@router.post("/sites/{slug}/deploy", response_model=DeploymentResponse, status_code=status.HTTP_201_CREATED)
-async def deploy_site(
-    slug: str,
-    file: UploadFile = File(...),
-    prefix: str = Form(""),
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    sub = _get_active_hosting_sub(current_user.id, db)
+def _deploy_zip(db: Session, site: StaticSite, sub: Subscription, user_id: int,
+                raw: bytes, prefix: str) -> StaticSiteDeployment:
+    """Inti proses deploy ZIP — dipakai endpoint web (JWT) maupun proxy kunci (/hosting-api)."""
     _require_can_add(sub)
-    site = db.query(StaticSite).filter(
-        StaticSite.slug == slug,
-        StaticSite.user_id == current_user.id,
-        StaticSite.status == SiteStatus.active,
-    ).first()
-    if not site:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Situs tidak ditemukan")
-
     # Situs dorman (melebihi batas jumlah situs paket) → tidak boleh deploy
-    if site.id in _dormant_site_ids(db, current_user.id, sub.plan.static_site_limit):
+    if site.id in _dormant_site_ids(db, user_id, sub.plan.static_site_limit):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Situs ini dorman karena melebihi batas jumlah situs paket Anda. "
                    "Upgrade paket atau hapus situs lain untuk mengaktifkannya kembali.",
         )
 
-    raw = await file.read()
     if not zipfile.is_zipfile(io.BytesIO(raw)):
         raise HTTPException(status_code=422, detail="File harus berupa ZIP")
 
@@ -454,7 +441,7 @@ async def deploy_site(
 
     # Cek kuota build size hosting
     limit = sub.plan.storage_limit_bytes
-    current_used = _hosting_used_bytes(current_user.id, db)
+    current_used = _hosting_used_bytes(user_id, db)
     current_site_active_size = 0
     if site.active_deployment_id:
         cur = db.get(StaticSiteDeployment, site.active_deployment_id)
@@ -473,7 +460,7 @@ async def deploy_site(
     deployment_path = f"{site.slug}/{ref}"
     dep = StaticSiteDeployment(
         site_id=site.id,
-        user_id=current_user.id,
+        user_id=user_id,
         deployment_ref=ref,
         deployment_path=deployment_path,
         status=DeploymentStatus.deploying,
@@ -505,7 +492,7 @@ async def deploy_site(
     usage_helper.evaluate_quota_status(db, sub)
     log_activity(
         db,
-        actor_user_id=current_user.id,
+        actor_user_id=user_id,
         action="STATIC_SITE_DEPLOYED",
         description=f"Deploy versi baru situs '{site.site_name}' ({len(files)} file)",
         target_type="SITE",
@@ -514,7 +501,27 @@ async def deploy_site(
     )
     db.commit()
     db.refresh(dep)
+    return dep
 
+
+@router.post("/sites/{slug}/deploy", response_model=DeploymentResponse, status_code=status.HTTP_201_CREATED)
+async def deploy_site(
+    slug: str,
+    file: UploadFile = File(...),
+    prefix: str = Form(""),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    sub = _get_active_hosting_sub(current_user.id, db)
+    site = db.query(StaticSite).filter(
+        StaticSite.slug == slug,
+        StaticSite.user_id == current_user.id,
+        StaticSite.status == SiteStatus.active,
+    ).first()
+    if not site:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Situs tidak ditemukan")
+    raw = await file.read()
+    dep = _deploy_zip(db, site, sub, current_user.id, raw, prefix)
     dr = DeploymentResponse.model_validate(dep)
     dr.is_active = True
     return dr
@@ -665,7 +672,9 @@ def deactivate_site(
     slug: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    x_transaction_pin: str | None = Header(default=None, alias="X-Transaction-PIN"),
 ):
+    require_pin(current_user, x_transaction_pin)
     """Nonaktifkan situs aktif → offline (status suspended). Bisa diaktifkan lagi."""
     _get_active_hosting_sub(current_user.id, db)
     site = db.query(StaticSite).filter(

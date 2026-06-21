@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { parseUTC } from '../utils/datetime'
 import { useParams, useNavigate } from 'react-router-dom'
 import AdminNav from '../components/AdminNav'
-import { getAdminSubscription, getAdminPlans, adminChangePlan, adminFastForward, adminSuspendSub, adminUnsuspendSub, adminExpireGrace } from '../services/admin'
+import { getAdminSubscription, adminFastForward, adminSuspendSub, adminUnsuspendSub, adminExpireGrace, adminRepairSubscription } from '../services/admin'
 import './AdminDashboardPage.css'
 import './AdminPages.css'
 
@@ -18,7 +18,7 @@ function fmtDate(s) {
 function fmtDateTime(s) {
   if (!s) return '-'
   const d = parseUTC(s)
-  return `${d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}, ${d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}`
+  return `${d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} · ${d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}`
 }
 const ACTION_LABEL = {
   PACKAGE_SUBSCRIBED: 'Berlangganan', PACKAGE_UPGRADED: 'Upgrade',
@@ -29,10 +29,7 @@ export default function AdminSubscriptionDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const [s, setS] = useState(null)
-  const [plans, setPlans] = useState([])
   const [loading, setLoading] = useState(true)
-  const [showForce, setShowForce] = useState(false)
-  const [targetPlan, setTargetPlan] = useState('')
   const [busy, setBusy] = useState(false)
 
   function load() {
@@ -41,7 +38,7 @@ export default function AdminSubscriptionDetailPage() {
     })
   }
   useEffect(() => {
-    Promise.all([load(), getAdminPlans().then((r) => setPlans(r.data)).catch(() => {})]).finally(() => setLoading(false))
+    load().finally(() => setLoading(false))
   }, [id])
 
   async function fastForward() {
@@ -59,20 +56,11 @@ export default function AdminSubscriptionDetailPage() {
     finally { setBusy(false) }
   }
 
-  async function doForce() {
-    if (!targetPlan) return
-    setBusy(true)
-    try { await adminChangePlan(id, Number(targetPlan)); setShowForce(false); setTargetPlan(''); await load() }
-    catch (e) { alert(e.response?.data?.detail || 'Gagal mengubah paket') }
-    finally { setBusy(false) }
-  }
-
   if (loading) return <div className="adm-page"><AdminNav /><div className="adm-loading">Memuat...</div></div>
   if (!s) return null
 
   const storagePct = s.storage_limit_bytes ? Math.round(s.storage_used_bytes / s.storage_limit_bytes * 100) : 0
   const bwPct = s.bandwidth_limit_bytes ? Math.round(s.bandwidth_used_bytes / s.bandwidth_limit_bytes * 100) : 0
-  const samePlans = plans.filter((p) => p.category === s.category)
 
   return (
     <div className="adm-page">
@@ -87,6 +75,7 @@ export default function AdminSubscriptionDetailPage() {
             </div>
           </div>
           <div className="adm-detail-actions">
+            <button className="adm-btn-ghost" onClick={() => runAction(adminRepairSubscription)} disabled={busy} title="Hitung ulang pemakaian & evaluasi status (perbaiki angka/over_quota nyangkut)">🔧 Perbaiki</button>
             <button className="adm-btn-ghost" onClick={fastForward} disabled={busy} title="DEMO: majukan periode untuk menerapkan downgrade terjadwal">⏩ Majukan Periode</button>
             {s.status === 'over_quota' && (
               <button className="adm-btn-ghost" onClick={() => runAction(adminExpireGrace)} disabled={busy} title="DEMO: habiskan grace period sekarang lalu jalankan auto-suspend">⏳ Habiskan Grace</button>
@@ -96,7 +85,6 @@ export default function AdminSubscriptionDetailPage() {
             ) : (
               <button className="adm-btn-ghost adm-btn-suspend" onClick={() => runAction(adminSuspendSub, `Suspend langganan ${s.client_name}?`)} disabled={busy}>⏸ Suspend</button>
             )}
-            <button className="adm-btn-ghost adm-btn-suspend" onClick={() => setShowForce(true)}>⚠ Force Change Plan</button>
           </div>
         </div>
 
@@ -141,30 +129,6 @@ export default function AdminSubscriptionDetailPage() {
           </table>
         </div>
       </main>
-
-      {showForce && (
-        <div className="adm-modal-overlay" onClick={() => setShowForce(false)}>
-          <div className="adm-modal" onClick={(e) => e.stopPropagation()}>
-            <h2 className="adm-modal-title">Force Change Plan</h2>
-            <p style={{ fontSize: 13, color: '#6b7280', marginTop: -10, marginBottom: 16 }}>
-              Ubah paket langganan <b>{s.client_name}</b> langsung (override admin). Hanya paket kategori <b>{s.category}</b>.
-            </p>
-            <div className="adm-field adm-field--full">
-              <label>Paket Tujuan</label>
-              <select value={targetPlan} onChange={(e) => setTargetPlan(e.target.value)}>
-                <option value="">— pilih paket —</option>
-                {samePlans.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name} — Rp {new Intl.NumberFormat('id-ID').format(p.price)}</option>
-                ))}
-              </select>
-            </div>
-            <div className="adm-modal-actions">
-              <button className="adm-btn-ghost" onClick={() => setShowForce(false)} disabled={busy}>Batal</button>
-              <button className="adm-btn-primary" onClick={doForce} disabled={busy || !targetPlan}>{busy ? 'Memproses...' : 'Terapkan'}</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

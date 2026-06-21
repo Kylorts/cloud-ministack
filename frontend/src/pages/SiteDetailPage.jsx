@@ -5,6 +5,7 @@ import Navbar from '../components/Navbar'
 import PinPromptModal from '../components/PinPromptModal'
 import { getSite, deploySite, rollbackDeployment, deleteSite, deleteDeployment, deactivateSite, activateSite, getHostingUsage } from '../services/hosting'
 import { getPinErrorCode } from '../services/security'
+import { usePinPrompt } from '../utils/usePinPrompt'
 import './SiteDetailPage.css'
 
 function TrashIcon() {
@@ -160,17 +161,20 @@ export default function SiteDetailPage() {
     getHostingUsage().then((r) => setBuildLimit(r.data?.build_limit_bytes || 0)).catch(() => {})
   }, [])
 
+  const { run: runDeactivatePin, pinModal: deactivatePinModal } = usePinPrompt({
+    title: 'Nonaktifkan Situs', description: 'Masukkan PIN Transaksi untuk menonaktifkan situs ini.',
+  })
+
   async function toggleActive() {
-    setBusy(true)
-    try {
-      if (site.status === 'active') await deactivateSite(id)
-      else await activateSite(id)
-      await loadData()
-    } catch (err) {
-      alert(err.response?.data?.detail || 'Gagal mengubah status situs')
-    } finally {
-      setBusy(false)
+    if (site.status === 'active') {
+      runDeactivatePin((pin) => deactivateSite(id, pin)).then(loadData)
+        .catch((err) => { if (!err?.pinCancelled) alert(err.response?.data?.detail || 'Gagal menonaktifkan situs') })
+      return
     }
+    setBusy(true)
+    try { await activateSite(id); await loadData() }
+    catch (err) { alert(err.response?.data?.detail || 'Gagal mengaktifkan situs') }
+    finally { setBusy(false) }
   }
 
   async function confirmRollback() {
@@ -451,6 +455,7 @@ export default function SiteDetailPage() {
         onSubmit={(pin) => confirmDelete(pin)}
         onClose={() => { setPinOpen(false); setPinErr('') }}
       />
+      {deactivatePinModal}
     </div>
   )
 }

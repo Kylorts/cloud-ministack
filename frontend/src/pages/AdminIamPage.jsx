@@ -94,7 +94,7 @@ export default function AdminIamPage() {
           <button className="adm-btn-primary" onClick={() => setEdit({})}>+ Buat Policy Baru</button>
         </div>
 
-        <div className="adm-sim-banner">ℹ Policy disimpan & dikelola di sini, namun <b>belum di-enforce</b> ke akses nyata (tahap manajemen).</div>
+        <div className="adm-sim-banner">🔒 Policy <b>di-enforce</b> untuk akses lewat <b>access key</b> — storage via <code>/s3</code> &amp; hosting via <code>/hosting-api</code> (Allow/Deny, explicit Deny menang). Catatan: akses via web UI (pemilik akun) tidak diatur policy.</div>
 
         <div className="adm-table-card">
           <table className="adm-table">
@@ -109,11 +109,19 @@ export default function AdminIamPage() {
                   <td className="adm-instance-name">{p.name}</td>
                   <td className="adm-owner-cell">{p.description || '-'}</td>
                   <td><span className={`adm-badge ${p.policy_type === 'system' ? 'adm-badge--minio' : 'adm-badge--ec2'}`}>{p.policy_type === 'system' ? 'System' : 'Custom'}</span></td>
-                  <td className="adm-owner-cell">{p.created_by || '-'}</td>
-                  <td style={{ display: 'flex', gap: 12 }}>
-                    <button className="adm-link-btn" onClick={() => setView(p)}>Lihat JSON</button>
-                    {p.policy_type !== 'system' && <button className="adm-link-btn" onClick={() => setEdit(p)}>Edit</button>}
-                    {p.policy_type !== 'system' && <button className="adm-link-btn" style={{ color: '#dc2626' }} onClick={() => remove(p)}>Hapus</button>}
+                  <td className="adm-owner-cell">{p.policy_type === 'system' ? 'Sistem (bawaan)' : (p.created_by || 'Admin')}</td>
+                  <td>
+                    <div className="adm-row-actions">
+                      <button className="adm-link-btn" onClick={() => setView(p)}>Lihat JSON</button>
+                      {p.policy_type === 'system' ? (
+                        <span className="adm-row-actions-note" title="Policy sistem tidak bisa diubah/dihapus">Terkunci</span>
+                      ) : (
+                        <>
+                          <button className="adm-link-btn" onClick={() => setEdit(p)}>Edit</button>
+                          <button className="adm-link-btn adm-link-btn--danger" onClick={() => remove(p)}>Hapus</button>
+                        </>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}

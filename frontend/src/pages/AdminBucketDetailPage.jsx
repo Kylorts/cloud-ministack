@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { parseUTC } from '../utils/datetime'
 import { useParams, useNavigate } from 'react-router-dom'
 import AdminNav from '../components/AdminNav'
-import { getAdminBucketDetail } from '../services/admin'
+import { getAdminBucketDetail, adminRepairBucket } from '../services/admin'
 import './AdminDashboardPage.css'
 import './AdminPages.css'
 
@@ -16,7 +16,7 @@ function fmtBytes(b) {
 function fmtDate(s) {
   if (!s) return '-'
   const d = parseUTC(s)
-  return `${d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}, ${d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}`
+  return `${d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} · ${d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}`
 }
 
 export default function AdminBucketDetailPage() {
@@ -24,12 +24,21 @@ export default function AdminBucketDetailPage() {
   const navigate = useNavigate()
   const [b, setB] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState(false)
 
-  useEffect(() => {
-    getAdminBucketDetail(id).then((r) => setB(r.data)).catch((e) => {
+  function load() {
+    return getAdminBucketDetail(id).then((r) => setB(r.data)).catch((e) => {
       if (e.response?.status === 404) navigate('/admin/monitoring/storage', { replace: true })
-    }).finally(() => setLoading(false))
-  }, [id])
+    })
+  }
+  useEffect(() => { load().finally(() => setLoading(false)) }, [id])
+
+  async function repair() {
+    setBusy(true)
+    try { const r = await adminRepairBucket(id); alert(r.data?.message || 'OK'); await load() }
+    catch (e) { alert(e.response?.data?.detail || 'Gagal memperbaiki bucket') }
+    finally { setBusy(false) }
+  }
 
   if (loading) return <div className="adm-page"><AdminNav /><div className="adm-loading">Memuat...</div></div>
   if (!b) return null
@@ -42,9 +51,15 @@ export default function AdminBucketDetailPage() {
         { label: 'Detail Bucket' },
       ]} />
       <main className="adm-main">
-        <div className="adm-header">
-          <h1 className="adm-page-title">{b.name}</h1>
-          <p className="adm-page-sub">Tampilan read-only — milik {b.owner_name}.</p>
+        <div className="adm-toolbar">
+          <div className="adm-header">
+            <h1 className="adm-page-title">{b.name}</h1>
+            <p className="adm-page-sub">Tampilan read-only — milik {b.owner_name}.</p>
+          </div>
+          <button className="adm-btn-ghost" onClick={repair} disabled={busy}
+            title="Sinkronkan dgn MiniStack, self-heal objek hilang, betulkan status macet">
+            {busy ? 'Memperbaiki...' : '🔧 Perbaiki Bucket'}
+          </button>
         </div>
 
         <div className="adm-mini-grid">

@@ -3,8 +3,11 @@ import { parseUTC } from '../utils/datetime'
 import { useNavigate } from 'react-router-dom'
 import AdminNav from '../components/AdminNav'
 import { getAdminUsers } from '../services/admin'
+import AdminPagination from '../components/AdminPagination'
 import './AdminDashboardPage.css'
 import './AdminPages.css'
+
+const PAGE_SIZE = 15
 
 function fmtDate(s) {
   if (!s) return '-'
@@ -13,16 +16,24 @@ function fmtDate(s) {
 
 export default function AdminUsersPage() {
   const [users, setUsers] = useState([])
+  const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [q, setQ] = useState('')
+  const [page, setPage] = useState(1)
   const navigate = useNavigate()
 
+  useEffect(() => { setPage(1) }, [q])
   useEffect(() => {
-    getAdminUsers().then((r) => setUsers(r.data)).catch(() => setUsers([])).finally(() => setLoading(false))
-  }, [])
+    const t = setTimeout(() => {
+      setLoading(true)
+      getAdminUsers({ q, page, page_size: PAGE_SIZE })
+        .then((r) => { setUsers(r.data.items); setTotal(r.data.total) })
+        .catch(() => { setUsers([]); setTotal(0) }).finally(() => setLoading(false))
+    }, 200)
+    return () => clearTimeout(t)
+  }, [q, page])
 
-  const filtered = users.filter((u) =>
-    !q || u.name.toLowerCase().includes(q.toLowerCase()) || u.email.toLowerCase().includes(q.toLowerCase()))
+  const filtered = users
 
   return (
     <div className="adm-page">
@@ -67,9 +78,7 @@ export default function AdminUsersPage() {
               ))}
             </tbody>
           </table>
-          {!loading && (
-            <div className="adm-pagi"><span>Menampilkan {filtered.length} dari {users.length} klien</span></div>
-          )}
+          {!loading && <AdminPagination page={page} pageSize={PAGE_SIZE} total={total} onPage={setPage} label="klien" />}
         </div>
       </main>
     </div>

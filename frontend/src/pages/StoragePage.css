@@ -116,6 +116,8 @@
   white-space: nowrap;
 }
 .btn-create-bucket:hover { opacity: 0.88; }
+.btn-create-bucket:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn-create-bucket:disabled:hover { opacity: 0.45; }
 
 /* Stat cards */
 .storage-stats {

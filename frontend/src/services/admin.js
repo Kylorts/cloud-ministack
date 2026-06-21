@@ -7,39 +7,34 @@ export async function fetchAdminStats() {
 
 export const getAdminStats = () => api.get('/admin/stats')
 export const getAdminResources = () => api.get('/admin/resources')
-export const getAdminAccessKeys = () => api.get('/admin/access-keys')
+export const getAdminAccessKeys = (params) => api.get('/admin/access-keys', { params })
 
 // Fase B — pengguna
-export const getAdminUsers = () => api.get('/admin/users')
+export const getAdminUsers = (params) => api.get('/admin/users', { params })
 export const getAdminUser = (id) => api.get(`/admin/users/${id}`)
 export const setUserStatus = (id, status) => api.post(`/admin/users/${id}/status`, { status })
 
-// Fase C — paket
-export const getAdminPlans = () => api.get('/admin/plans')
-export const createAdminPlan = (data) => api.post('/admin/plans', data)
-export const updateAdminPlan = (id, data) => api.put(`/admin/plans/${id}`, data)
-export const deleteAdminPlan = (id) => api.delete(`/admin/plans/${id}`)
+// Fase C — paket: katalog paket TIDAK dikelola admin (read-only, di luar wewenang admin).
 
 // Fase D — langganan
-export const getAdminSubscriptions = (status = 'all') =>
-  api.get('/admin/subscriptions', { params: { status } })
+export const getAdminSubscriptions = (status = 'all', params = {}) =>
+  api.get('/admin/subscriptions', { params: { status, ...params } })
 export const getAdminSubscription = (id) => api.get(`/admin/subscriptions/${id}`)
-export const adminChangePlan = (id, planId) =>
-  api.post(`/admin/subscriptions/${id}/change-plan`, { plan_id: planId })
 export const adminFastForward = (id) => api.post(`/admin/subscriptions/${id}/fast-forward`)
 export const adminSuspendSub = (id) => api.post(`/admin/subscriptions/${id}/suspend`)
 export const adminUnsuspendSub = (id) => api.post(`/admin/subscriptions/${id}/unsuspend`)
 export const adminExpireGrace = (id) => api.post(`/admin/subscriptions/${id}/expire-grace`)
+export const adminRepairSubscription = (id) => api.post(`/admin/subscriptions/${id}/repair`)
 
-// Fase E — transaksi (dummy/simulasi)
-export const getAdminTransactions = () => api.get('/admin/transactions')
-export const getAdminTransaction = (id) => api.get(`/admin/transactions/${id}`)
+// Riwayat langganan (event berhasil dari activity log; menggantikan "transaksi")
+export const getAdminSubscriptionHistory = (params) => api.get('/admin/subscription-history', { params })
 
 // Fase F — monitoring sumber daya
 export const getAdminMonitoring = () => api.get('/admin/monitoring')
-export const getAdminStorageBuckets = (q = '') => api.get('/admin/storage-buckets', { params: { q } })
+export const getAdminStorageBuckets = (q = '', params = {}) => api.get('/admin/storage-buckets', { params: { q, ...params } })
 export const getAdminBucketDetail = (id) => api.get(`/admin/storage-buckets/${id}`)
-export const getAdminHostingSites = (q = '') => api.get('/admin/hosting-sites', { params: { q } })
+export const adminRepairBucket = (id) => api.post(`/admin/storage-buckets/${id}/repair`)
+export const getAdminHostingSites = (q = '', params = {}) => api.get('/admin/hosting-sites', { params: { q, ...params } })
 
 // Fase G — keamanan & log
 export const getAdminLogs = (params) => api.get('/admin/logs', { params })

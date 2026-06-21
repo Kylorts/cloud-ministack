@@ -1,5 +1,14 @@
 from datetime import datetime
+from typing import Generic, TypeVar
 from pydantic import BaseModel
+
+T = TypeVar("T")
+
+
+class Page(BaseModel, Generic[T]):
+    """Wrapper paginasi server-side: daftar item halaman ini + total keseluruhan."""
+    items: list[T]
+    total: int
 
 
 class StatsResponse(BaseModel):
@@ -178,6 +187,15 @@ class AdminTransactionDetail(AdminTransactionItem):
     raw_notification: dict
 
 
+# ── Riwayat Langganan (event berhasil dari activity log) ──
+class AdminSubHistoryItem(BaseModel):
+    id: int
+    client_name: str
+    action: str
+    detail: str | None = None
+    created_at: datetime
+
+
 # ── Fase F: Monitoring Sumber Daya ──
 class AdminTopUser(BaseModel):
     name: str
@@ -237,6 +255,7 @@ class AdminSiteRow(BaseModel):
 class AdminLogItem(BaseModel):
     id: int
     actor_type: str
+    actor_role: str = "user"  # peran sebenarnya pelaku (admin/user/system) untuk pill
     actor_name: str
     action: str
     target: str

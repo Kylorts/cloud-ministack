@@ -3,6 +3,7 @@ import { parseUTC } from '../utils/datetime'
 import Navbar from '../components/Navbar'
 import { getActivityLogs } from '../services/activity'
 import { actionLabel } from '../utils/actionLabels'
+import { exportXlsx, exportPdf } from '../utils/exporters'
 import './AktivitasPage.css'
 
 function getResource(log) {
@@ -20,11 +21,9 @@ function statusOf(log) {
 function formatWita(dateStr) {
   if (!dateStr) return '-'
   const d = parseUTC(dateStr)
-  const s = d.toLocaleString('id-ID', {
-    day: 'numeric', month: 'short', year: 'numeric',
-    hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Makassar',
-  })
-  return `${s} WITA`
+  const time = d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Makassar' })
+  const date = d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Makassar' })
+  return `${time} WITA · ${date}`
 }
 
 const FILTERS = [
@@ -92,20 +91,15 @@ export default function AktivitasPage() {
     setPage(1)
   }
 
-  function exportCsv() {
-    const header = ['Waktu', 'Tindakan', 'Resource', 'IP', 'Status']
-    const rows = filtered.map((l) => [
+  const EXPORT_HEADERS = ['Waktu', 'Tindakan', 'Resource', 'IP', 'Status']
+  function exportRows() {
+    return filtered.map((l) => [
       formatWita(l.created_at), actionLabel(l.action), getResource(l),
       l.ip_address || '-', statusOf(l) === 'denied' ? 'Denied' : 'Success',
     ])
-    const csv = [header, ...rows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n')
-    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }))
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'riwayat-aktivitas.csv'
-    a.click()
-    URL.revokeObjectURL(url)
   }
+  function onExportExcel() { exportXlsx('riwayat-aktivitas', 'Aktivitas', EXPORT_HEADERS, exportRows()) }
+  function onExportPdf() { exportPdf('riwayat-aktivitas', 'Riwayat Aktivitas', EXPORT_HEADERS, exportRows()) }
 
   return (
     <div className="aktivitas-page">
@@ -144,9 +138,13 @@ export default function AktivitasPage() {
                 </div>
               )}
             </div>
-            <button className="aktivitas-tool-btn" onClick={exportCsv}>
+            <button className="aktivitas-tool-btn" onClick={onExportExcel} title="Unduh sebagai Excel (.xlsx)">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              Export
+              Excel
+            </button>
+            <button className="aktivitas-tool-btn" onClick={onExportPdf} title="Unduh sebagai PDF">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              PDF
             </button>
           </div>
         </div>

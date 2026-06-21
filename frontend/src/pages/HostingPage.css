@@ -13,6 +13,8 @@
   font-size: 13px; font-weight: 600; font-family: var(--font-ui); white-space: nowrap;
 }
 .btn-create-site:hover { opacity: 0.88; }
+.btn-create-site:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn-create-site:disabled:hover { opacity: 0.45; }
 
 /* Warning banner */
 .hosting-warning-banner {

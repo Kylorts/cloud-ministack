@@ -30,6 +30,19 @@ USER_SEEDS = [
 
 PLAN_SEEDS = [
     {
+        "name": "Storage Free",
+        "description": "Tier gratis untuk mulai mencoba penyimpanan.",
+        "category": PlanCategory.storage,
+        "price": 0.00,
+        "billing_period": BillingPeriod.monthly,
+        "storage_limit_bytes": 100 * 1_048_576,          # 100 MB
+        "max_file_size_bytes": 20 * 1_048_576,            # 20 MB
+        "bandwidth_limit_bytes": 50 * 1_048_576,          # 50 MB
+        "bucket_limit": 1,
+        "static_site_limit": 0,
+        "access_key_limit": 1,
+    },
+    {
         "name": "Storage Lite",
         "description": "Paket penyimpanan dasar untuk kebutuhan personal.",
         "category": PlanCategory.storage,
@@ -69,6 +82,19 @@ PLAN_SEEDS = [
         "access_key_limit": 3,
     },
     # ── Paket Hosting ──
+    {
+        "name": "Hosting Free",
+        "description": "Tier gratis untuk mulai mencoba hosting statis.",
+        "category": PlanCategory.hosting,
+        "price": 0.00,
+        "billing_period": BillingPeriod.monthly,
+        "storage_limit_bytes": 10 * 1_048_576,           # 10 MB total build
+        "max_file_size_bytes": 10 * 1_048_576,
+        "bandwidth_limit_bytes": 50 * 1_048_576,          # 50 MB
+        "bucket_limit": 0,
+        "static_site_limit": 1,
+        "access_key_limit": 1,
+    },
     {
         "name": "Hosting Lite",
         "description": "Hosting situs statis untuk 1 website.",

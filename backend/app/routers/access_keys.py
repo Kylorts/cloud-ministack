@@ -22,6 +22,7 @@ router = APIRouter(prefix="/access-keys", tags=["access-keys"])
 
 MINISTACK_PUBLIC_ENDPOINT = "http://localhost:4566"
 PROXY_PUBLIC_ENDPOINT = "http://localhost:8000/s3"
+HOSTING_PROXY_ENDPOINT = "http://localhost:8000/hosting-api"
 ACCESS_STATUSES = [
     SubscriptionStatus.active,
     SubscriptionStatus.over_quota,
@@ -137,7 +138,9 @@ def create_key(
     category: str = Query("storage"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    x_transaction_pin: str | None = Header(default=None, alias="X-Transaction-PIN"),
 ):
+    require_pin(current_user, x_transaction_pin)
     sub = _get_sub(current_user.id, category, db)
 
     # OVER_QUOTA / suspended → tidak boleh tambah kunci
@@ -230,8 +233,16 @@ def create_key(
         )
     else:
         usage_example = (
-            "# Kunci Hosting — endpoint proxy ber-auth untuk hosting belum tersedia.\n"
-            "# Simpan kunci ini untuk integrasi mendatang."
+            f"# List situs Anda\n"
+            f"curl -H 'X-Access-Key-Id: {access_key_id}' -H 'X-Secret-Key: {secret}' \\\n"
+            f"  {HOSTING_PROXY_ENDPOINT}/sites\n\n"
+            f"# Deploy ZIP ke situs (ganti <slug-situs>)\n"
+            f"curl -X POST -H 'X-Access-Key-Id: {access_key_id}' -H 'X-Secret-Key: {secret}' \\\n"
+            f"  -F 'file=@build.zip' \\\n"
+            f"  {HOSTING_PROXY_ENDPOINT}/sites/<slug-situs>/deploy\n\n"
+            f"# Hapus situs\n"
+            f"curl -X DELETE -H 'X-Access-Key-Id: {access_key_id}' -H 'X-Secret-Key: {secret}' \\\n"
+            f"  {HOSTING_PROXY_ENDPOINT}/sites/<slug-situs>"
         )
 
     base = AccessKeyResponse.model_validate(key).model_dump()

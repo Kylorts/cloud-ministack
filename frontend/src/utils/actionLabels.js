@@ -4,6 +4,8 @@ export const ACTION_LABELS = {
   // Akun & keamanan
   USER_LOGIN: 'Login Berhasil',
   USER_REGISTERED: 'Daftar Akun',
+  PASSWORD_RESET_REQUESTED: 'Minta Reset Sandi',
+  PASSWORD_RESET_COMPLETED: 'Reset Sandi Berhasil',
   USER_STATUS_CHANGED: 'Ubah Status Akun',
   PASSWORD_CHANGED: 'Ubah Kata Sandi',
   PIN_SET: 'Atur PIN Transaksi',
@@ -18,6 +20,8 @@ export const ACTION_LABELS = {
   SUBSCRIPTION_CANCELLED: 'Batalkan Langganan',
   SUBSCRIPTION_SUSPENDED: 'Langganan Disuspend',
   SUBSCRIPTION_UNSUSPENDED: 'Langganan Dipulihkan',
+  SUBSCRIPTION_REPAIRED: 'Perbaiki Langganan',
+  BUCKET_REPAIRED: 'Perbaiki Bucket',
   // Storage
   BUCKET_CREATED: 'Buat Bucket',
   BUCKET_DELETED: 'Hapus Bucket',

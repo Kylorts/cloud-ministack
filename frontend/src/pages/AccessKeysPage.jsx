@@ -4,6 +4,7 @@ import Navbar from '../components/Navbar'
 import PinPromptModal from '../components/PinPromptModal'
 import { getAccessKeys, createAccessKey, revokeAccessKey, getKeyPolicies } from '../services/accessKeys'
 import { getPinErrorCode } from '../services/security'
+import { usePinPrompt } from '../utils/usePinPrompt'
 import './AccessKeysPage.css'
 
 function PlusIcon() {
@@ -27,6 +28,7 @@ function CreateKeyModal({ category, onClose, onCreated }) {
   const [policies, setPolicies] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const { run: runPin, pinModal } = usePinPrompt({ title: 'Buat Access Key', description: 'Masukkan PIN Transaksi untuk membuat access key.' })
 
   useEffect(() => {
     getKeyPolicies(category).then((r) => {
@@ -40,21 +42,19 @@ function CreateKeyModal({ category, onClose, onCreated }) {
 
   const selected = policies.find((p) => String(p.id) === policyId)
 
-  async function handleSubmit(e) {
+  function handleSubmit(e) {
     e.preventDefault()
-    setError(''); setLoading(true)
-    try {
-      const res = await createAccessKey(category, {
-        name: name || null,
-        policy_id: policyId ? Number(policyId) : null,
+    setError('')
+    runPin((pin) => createAccessKey(category, {
+      name: name || null,
+      policy_id: policyId ? Number(policyId) : null,
+    }, pin))
+      .then((res) => onCreated(res.data))
+      .catch((err) => {
+        if (err?.pinCancelled) return
+        const d = err.response?.data?.detail
+        setError(Array.isArray(d) ? d[0]?.msg : (typeof d === 'string' ? d : 'Gagal membuat kunci'))
       })
-      onCreated(res.data)
-    } catch (err) {
-      const d = err.response?.data?.detail
-      setError(Array.isArray(d) ? d[0]?.msg : (d || 'Gagal membuat kunci'))
-    } finally {
-      setLoading(false)
-    }
   }
 
   return (
@@ -94,6 +94,7 @@ function CreateKeyModal({ category, onClose, onCreated }) {
           </div>
         </form>
       </div>
+      {pinModal}
     </div>
   )
 }

@@ -4,8 +4,8 @@ import { pinHeader } from './security'
 export const getAccessKeys = (category = 'storage') =>
   api.get('/access-keys', { params: { category } })
 
-export const createAccessKey = (category, data) =>
-  api.post('/access-keys', data, { params: { category } })
+export const createAccessKey = (category, data, pin) =>
+  api.post('/access-keys', data, { params: { category }, ...pinHeader(pin) })
 
 export const getKeyPolicies = (category = 'storage') =>
   api.get('/access-keys/policies', { params: { category } })

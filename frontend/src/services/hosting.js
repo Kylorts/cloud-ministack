@@ -3,10 +3,10 @@ import { pinHeader } from './security'
 
 export const getHostingUsage = () => api.get('/hosting/usage')
 export const getSites = () => api.get('/hosting/sites')
-export const createSite = (siteName) => api.post('/hosting/sites', { site_name: siteName })
+export const createSite = (siteName, pin) => api.post('/hosting/sites', { site_name: siteName }, pinHeader(pin))
 export const getSite = (id) => api.get(`/hosting/sites/${id}`)
 export const deleteSite = (id, pin) => api.delete(`/hosting/sites/${id}`, pinHeader(pin))
-export const deactivateSite = (id) => api.post(`/hosting/sites/${id}/deactivate`)
+export const deactivateSite = (id, pin) => api.post(`/hosting/sites/${id}/deactivate`, null, pinHeader(pin))
 export const activateSite = (id) => api.post(`/hosting/sites/${id}/activate`)
 
 export const deploySite = (siteId, file, prefix = '') => {

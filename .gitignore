@@ -17,3 +17,6 @@ desktop.ini
 .env
 .env.local
 .env.*.local
+
+# ── Dokumen internal (laporan, status, ERD, dll.) ─────────────
+docs/

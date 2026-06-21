@@ -2,25 +2,38 @@ import { useEffect, useState } from 'react'
 import { parseUTC } from '../utils/datetime'
 import AdminNav from '../components/AdminNav'
 import { getAdminAccessKeys, adminRevokeKey } from '../services/admin'
+import AdminPagination from '../components/AdminPagination'
 import './AdminDashboardPage.css'
 import './AdminPages.css'
+
+const PAGE_SIZE = 15
 
 function fmtWhen(s) {
   if (!s) return 'Belum pernah'
   const d = parseUTC(s); const now = new Date()
-  if (d.toDateString() === now.toDateString()) return `Hari ini, ${d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}`
+  if (d.toDateString() === now.toDateString()) return `${d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} · Hari ini`
   return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
 export default function AdminAccessKeysGlobalPage() {
   const [keys, setKeys] = useState([])
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [q, setQ] = useState('')
   const [detail, setDetail] = useState(null)
   const [busy, setBusy] = useState(false)
 
-  function load() { return getAdminAccessKeys().then((r) => setKeys(r.data)).catch(() => setKeys([])) }
-  useEffect(() => { load().finally(() => setLoading(false)) }, [])
+  function load() {
+    return getAdminAccessKeys({ q, page, page_size: PAGE_SIZE })
+      .then((r) => { setKeys(r.data.items); setTotal(r.data.total) })
+      .catch(() => { setKeys([]); setTotal(0) })
+  }
+  useEffect(() => { setPage(1) }, [q])
+  useEffect(() => {
+    const t = setTimeout(() => { setLoading(true); load().finally(() => setLoading(false)) }, 200)
+    return () => clearTimeout(t)
+  }, [q, page])
 
   async function revoke(k) {
     if (!window.confirm(`Cabut access key ${k.access_key_id} milik ${k.owner_name}?`)) return
@@ -30,8 +43,7 @@ export default function AdminAccessKeysGlobalPage() {
     finally { setBusy(false) }
   }
 
-  const filtered = keys.filter((k) =>
-    !q || k.access_key_id.toLowerCase().includes(q.toLowerCase()) || k.owner_name.toLowerCase().includes(q.toLowerCase()))
+  const filtered = keys
 
   return (
     <div className="adm-page">
@@ -76,6 +88,7 @@ export default function AdminAccessKeysGlobalPage() {
               ))}
             </tbody>
           </table>
+          {!loading && <AdminPagination page={page} pageSize={PAGE_SIZE} total={total} onPage={setPage} label="access key" />}
         </div>
       </main>
 

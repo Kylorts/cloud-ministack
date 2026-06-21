@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { login } from '../services/auth'
 import './LoginPage.css'
 
@@ -80,7 +80,7 @@ export default function LoginPage() {
     setError('')
     setLoading(true)
     try {
-      const data = await login(email, password)
+      const data = await login(email, password, rememberDevice)
       navigate(data.user.role === 'admin' ? '/admin' : '/dashboard')
     } catch (err) {
       const d = err.response?.data?.detail
@@ -142,7 +142,7 @@ export default function LoginPage() {
                 <label className="form-label" htmlFor="password">
                   Kata Sandi
                 </label>
-                <a href="#" className="forgot-link">Lupa kata sandi?</a>
+                <Link to="/lupa-sandi" className="forgot-link">Lupa kata sandi?</Link>
               </div>
               <div className="input-wrapper">
                 <span className="input-icon input-icon--left">

@@ -32,6 +32,13 @@ services:
       retries: 15
       start_period: 60s
 
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "8025:8025"   # web inbox
+      - "1025:1025"   # SMTP
+    restart: unless-stopped
+
   backend:
     build: ./backend
     ports:
@@ -50,10 +57,17 @@ services:
       MINISTACK_ACCESS_KEY: test
       MINISTACK_SECRET_KEY: test
       MINISTACK_REGION: us-east-1
+      SMTP_HOST: mailpit
+      SMTP_PORT: 1025
+      SMTP_FROM: no-reply@iniawan.id
+      SMTP_FROM_NAME: JadeStack
+      APP_BASE_URL: http://localhost:81
     depends_on:
       db:
         condition: service_healthy
       ministack:
+        condition: service_started
+      mailpit:
         condition: service_started
 
   frontend:

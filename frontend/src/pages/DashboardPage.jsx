@@ -188,7 +188,7 @@ export default function DashboardPage() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  function handleLogout() { logout(); navigate('/login') }
+  function handleLogout() { logout(); navigate('/') }
 
   // State per kategori: 'active' | 'dormant' | 'none'
   const storageState = categoryState(subHistory, 'storage')
@@ -230,13 +230,6 @@ export default function DashboardPage() {
           <span className="navbar-brand">JADESTACK</span>
         </div>
         <div className="navbar-right">
-          <div className="search-bar">
-            <SearchIcon />
-            <input type="text" placeholder="Cari sumber daya..." className="search-input" />
-          </div>
-          <button className="icon-btn notif-btn" aria-label="Notifikasi">
-            <BellIcon /><span className="notif-dot" />
-          </button>
           <div className="avatar-wrapper" ref={dropdownRef}>
             <button className="icon-btn avatar-btn" onClick={() => setDropdownOpen((v) => !v)}>
               <UserIcon />

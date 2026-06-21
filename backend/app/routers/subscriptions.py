@@ -9,7 +9,7 @@ from app.core.pin import require_pin
 from app.core import usage as usage_helper
 from app.database import get_db
 from app.models.access_key import AccessKey, KeyStatus
-from app.models.plan import ServicePlan
+from app.models.plan import PlanCategory, ServicePlan
 from app.models.subscription import (
     ACTIVE_LIKE_STATUSES,
     Subscription,
@@ -237,24 +237,53 @@ def cancel_subscription(
             detail="Tidak ada langganan aktif untuk dibatalkan",
         )
 
-    sub.status = SubscriptionStatus.cancelled
-    sub.cancelled_at = datetime.utcnow()
+    # Tier Free = lantai langganan. "Batalkan" paket berbayar = TURUN ke Free
+    # (langganan tak pernah kosong). Access key dipertahankan (langganan lanjut).
+    free_plan = (
+        db.query(ServicePlan)
+        .filter(
+            ServicePlan.category == PlanCategory(category),
+            ServicePlan.price == 0,
+            ServicePlan.is_active.is_(True),
+        )
+        .order_by(ServicePlan.id.asc())
+        .first()
+    )
+    if not free_plan:
+        raise HTTPException(status_code=400, detail="Paket Free tidak tersedia.")
+    if sub.plan_id == free_plan.id:
+        raise HTTPException(status_code=400, detail="Anda sudah di paket Free — tidak ada yang dibatalkan.")
 
-    # Key terikat ke langganan → cabut semua access key kategori ini
-    revoked = _revoke_category_keys(db, current_user.id, category)
+    old_name = sub.plan.name
+    now = datetime.utcnow()
+    sub.plan = free_plan
+    sub.scheduled_plan_id = None         # batalkan jadwal downgrade bila ada
+    sub.status = SubscriptionStatus.active  # bersihkan suspend/over_quota lama
+    sub.suspended_at = None
+    sub.over_quota_since = None
+    sub.grace_until = None
+    sub.cancelled_at = None
+    sub.current_period_start = now
+    sub.current_period_end = now + timedelta(days=30)
+
+    if category == "hosting":
+        usage_helper.recalculate_hosting(db, sub)
+    else:
+        usage_helper.recalculate(db, sub)
+    usage_helper.evaluate_quota_status(db, sub)  # → over_quota bila pemakaian > limit Free
 
     log_activity(
         db,
         actor_user_id=current_user.id,
         action="SUBSCRIPTION_CANCELLED",
-        description="Membatalkan langganan"
-                    + (f" (mencabut {revoked} access key)" if revoked else ""),
+        description=f"Membatalkan paket {old_name} → kembali ke {free_plan.name}",
         target_type="SUBSCRIPTION",
         target_id=sub.id,
     )
 
     db.commit()
-    return {"message": "Langganan berhasil dibatalkan"}
+    db.refresh(sub)
+    return {"message": f"Langganan diturunkan ke {free_plan.name}."}
 
 
 @router.post("/schedule-downgrade", status_code=status.HTTP_200_OK)

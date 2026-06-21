@@ -24,7 +24,7 @@ function formatBytes(bytes) {
 }
 
 function formatPrice(price) {
-  if (price === 0) return 'Rp 0'
+  if (!price || price === 0) return 'Gratis'
   return 'Rp ' + new Intl.NumberFormat('id-ID').format(price)
 }
 
@@ -50,7 +50,7 @@ export default function PaketPage() {
       getPlans(category),
       getMySubscription(category).catch(() => ({ data: null })),
     ]).then(([plansRes, subRes]) => {
-      setPlans(plansRes.data)
+      setPlans([...(plansRes.data || [])].sort((a, b) => a.price - b.price))
       setSubscription(subRes.data)
     }).finally(() => setLoading(false))
   }
@@ -98,8 +98,9 @@ export default function PaketPage() {
     return { label: 'Downgrade', type: 'downgrade' }
   }
 
-  function getPlanBadge(index) {
-    return (['Mulai', 'Populer', 'Enterprise'])[index] ?? ''
+  function getPlanBadge(plan, index) {
+    if (plan.price === 0) return 'Gratis'
+    return (['Mulai', 'Populer', 'Enterprise'])[index - 1] ?? ''
   }
 
   function planFeatures(plan) {
@@ -165,7 +166,7 @@ export default function PaketPage() {
                 <div key={plan.id} className={`plan-card ${isCurrent ? 'plan-card--active' : ''}`}>
                   {isCurrent && <div className="plan-ribbon">AKTIF</div>}
                   {isScheduled && <div className="plan-ribbon plan-ribbon--scheduled">TERJADWAL</div>}
-                  <div className="plan-badge">{getPlanBadge(index)}</div>
+                  <div className="plan-badge">{getPlanBadge(plan, index)}</div>
                   <h2 className="plan-name">{plan.name}</h2>
                   <div className="plan-price">
                     <span className="plan-price-value">{formatPrice(plan.price)}</span>

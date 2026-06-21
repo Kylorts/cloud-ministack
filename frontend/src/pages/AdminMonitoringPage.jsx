@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AdminNav from '../components/AdminNav'
 import { getAdminMonitoring } from '../services/admin'
+import { exportXlsx, exportPdf } from '../utils/exporters'
 import './AdminDashboardPage.css'
 import './AdminPages.css'
 
@@ -25,27 +26,23 @@ export default function AdminMonitoringPage() {
     getAdminMonitoring().then((r) => setM(r.data)).catch(() => setM(null)).finally(() => setLoading(false))
   }, [])
 
-  function exportCsv() {
-    if (!m) return
-    const rows = [
-      ['Metrik', 'Nilai'],
+  function exportRows() {
+    return [
       ['Total Storage Terpakai', fmtBytes(m.storage_used_bytes)],
       ['Kapasitas Platform', fmtBytes(m.storage_cap_bytes)],
       ['Total Bandwidth', fmtBytes(m.bandwidth_used_bytes)],
-      ['Total Bucket', m.bucket_count],
-      ['Total Situs', m.site_count],
+      ['Total Bucket', String(m.bucket_count)],
+      ['Total Situs', String(m.site_count)],
       ['Nodes Active', `${m.nodes_active}/${m.nodes_total}`],
       ['Kapasitas Server', `${m.capacity_percent}%`],
       ['Avg Load', `${m.avg_load_percent}%`],
-      [],
+      ['', ''],
       ['Top Storage Users', 'Pemakaian'],
       ...m.top_storage_users.map((u) => [u.name, fmtBytes(u.used_bytes)]),
     ]
-    const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n')
-    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }))
-    const a = document.createElement('a'); a.href = url; a.download = 'monitoring-sumber-daya.csv'; a.click()
-    URL.revokeObjectURL(url)
   }
+  function onExportExcel() { if (m) exportXlsx('monitoring-sumber-daya', 'Monitoring', ['Metrik', 'Nilai'], exportRows()) }
+  function onExportPdf() { if (m) exportPdf('monitoring-sumber-daya', 'Monitoring Sumber Daya Global', ['Metrik', 'Nilai'], exportRows()) }
 
   return (
     <div className="adm-page">
@@ -56,7 +53,10 @@ export default function AdminMonitoringPage() {
             <h1 className="adm-page-title">Pantauan Sumber Daya Global</h1>
             <p className="adm-page-sub">Ringkasan kesehatan, pemakaian, dan metrik kunci seluruh platform.</p>
           </div>
-          <button className="adm-btn-ghost" onClick={exportCsv}>↓ Export CSV</button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="adm-btn-ghost" onClick={onExportExcel}>↓ Excel</button>
+            <button className="adm-btn-ghost" onClick={onExportPdf}>↓ PDF</button>
+          </div>
         </div>
 
         {loading ? <div className="adm-loading">Memuat...</div> : !m ? (

@@ -70,7 +70,7 @@ export default function Sidebar({ open, onClose }) {
 
   function handleLogout() {
     logout()
-    navigate('/login')
+    navigate('/')
   }
 
   return (

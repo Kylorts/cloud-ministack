@@ -60,7 +60,7 @@ export default function Navbar({ breadcrumbs = [] }) {
 
   function handleLogout() {
     logout()
-    navigate('/login')
+    navigate('/')
   }
 
   return (
@@ -86,15 +86,6 @@ export default function Navbar({ breadcrumbs = [] }) {
       </div>
 
       <div className="top-nav-right">
-        <div className="top-nav-search">
-          <SearchIcon />
-          <input type="text" placeholder="Cari layanan..." className="top-nav-search-input" />
-        </div>
-
-        <button className="top-nav-icon-btn" aria-label="Notifikasi">
-          <BellIcon />
-        </button>
-
         <div className="top-nav-avatar-wrap" ref={dropdownRef}>
           <button
             className="top-nav-avatar-btn"

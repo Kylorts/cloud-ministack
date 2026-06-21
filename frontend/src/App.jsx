@@ -3,15 +3,15 @@ import { isAuthenticated, getStoredUser } from './services/auth'
 import LandingPage from './pages/LandingPage'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
+import LupaSandiPage from './pages/LupaSandiPage'
+import ResetSandiPage from './pages/ResetSandiPage'
 import DashboardPage from './pages/DashboardPage'
 import AdminDashboardPage from './pages/AdminDashboardPage'
 import AdminUsersPage from './pages/AdminUsersPage'
 import AdminUserDetailPage from './pages/AdminUserDetailPage'
-import AdminPlansPage from './pages/AdminPlansPage'
 import AdminSubscriptionsPage from './pages/AdminSubscriptionsPage'
 import AdminSubscriptionDetailPage from './pages/AdminSubscriptionDetailPage'
 import AdminTransactionsPage from './pages/AdminTransactionsPage'
-import AdminTransactionDetailPage from './pages/AdminTransactionDetailPage'
 import AdminMonitoringPage from './pages/AdminMonitoringPage'
 import AdminStorageBucketsPage from './pages/AdminStorageBucketsPage'
 import AdminBucketDetailPage from './pages/AdminBucketDetailPage'
@@ -61,6 +61,8 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
       <Route path="/register" element={<PublicRoute><RegisterPage /></PublicRoute>} />
+      <Route path="/lupa-sandi" element={<LupaSandiPage />} />
+      <Route path="/reset-sandi" element={<ResetSandiPage />} />
 
       <Route path="/dashboard" element={
         <PrivateRoute><DashboardPage /></PrivateRoute>
@@ -75,9 +77,6 @@ export default function App() {
       <Route path="/admin/pengguna/:id" element={
         <AdminRoute><AdminUserDetailPage /></AdminRoute>
       } />
-      <Route path="/admin/paket" element={
-        <AdminRoute><AdminPlansPage /></AdminRoute>
-      } />
       <Route path="/admin/langganan" element={
         <AdminRoute><AdminSubscriptionsPage /></AdminRoute>
       } />
@@ -86,9 +85,6 @@ export default function App() {
       } />
       <Route path="/admin/transaksi" element={
         <AdminRoute><AdminTransactionsPage /></AdminRoute>
-      } />
-      <Route path="/admin/transaksi/:id" element={
-        <AdminRoute><AdminTransactionDetailPage /></AdminRoute>
       } />
       <Route path="/admin/monitoring" element={
         <AdminRoute><AdminMonitoringPage /></AdminRoute>

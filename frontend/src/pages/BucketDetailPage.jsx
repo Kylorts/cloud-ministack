@@ -6,6 +6,7 @@ import PinPromptModal from '../components/PinPromptModal'
 import { getBucket, getObjects, uploadFile, downloadFile, deleteFile, deleteBucket, emptyBucket, getStorageUsage } from '../services/storage'
 import { getMySubscription } from '../services/subscriptions'
 import { getPinErrorCode } from '../services/security'
+import { usePinPrompt } from '../utils/usePinPrompt'
 import './BucketDetailPage.css'
 
 function UploadIcon() {
@@ -300,6 +301,7 @@ export default function BucketDetailPage() {
   const [pinErr, setPinErr] = useState('')
   const [showEmptyBucket, setShowEmptyBucket] = useState(false)
   const [emptying, setEmptying] = useState(false)
+  const { run: runPin, pinModal } = usePinPrompt({ title: 'Konfirmasi PIN', description: 'Masukkan PIN Transaksi untuk melanjutkan.' })
 
   function loadData() {
     return Promise.all([
@@ -323,18 +325,14 @@ export default function BucketDetailPage() {
     loadData().finally(() => setLoading(false))
   }, [id])
 
-  async function handleDelete() {
+  function handleDelete() {
     if (!deleteTarget) return
-    setDeletingId(deleteTarget.id)
-    try {
-      await deleteFile(id, deleteTarget.id)
-      setObjects((prev) => prev.filter((o) => o.id !== deleteTarget.id))
-      setDeleteTarget(null)
-    } catch (err) {
-      alert(err.response?.data?.detail || 'Gagal menghapus file')
-    } finally {
-      setDeletingId(null)
-    }
+    const target = deleteTarget
+    setDeletingId(target.id)
+    runPin((pin) => deleteFile(id, target.id, pin))
+      .then(() => { setObjects((prev) => prev.filter((o) => o.id !== target.id)); setDeleteTarget(null) })
+      .catch((err) => { if (!err?.pinCancelled) alert(err.response?.data?.detail || 'Gagal menghapus file') })
+      .finally(() => setDeletingId(null))
   }
 
   async function handleDownload(obj) {
@@ -363,17 +361,12 @@ export default function BucketDetailPage() {
     }
   }
 
-  async function handleEmptyBucket() {
+  function handleEmptyBucket() {
     setEmptying(true)
-    try {
-      await emptyBucket(id)
-      setShowEmptyBucket(false)
-      await loadData()
-    } catch (err) {
-      alert(err.response?.data?.detail || 'Gagal mengosongkan bucket')
-    } finally {
-      setEmptying(false)
-    }
+    runPin((pin) => emptyBucket(id, pin))
+      .then(() => { setShowEmptyBucket(false); return loadData() })
+      .catch((err) => { if (!err?.pinCancelled) alert(err.response?.data?.detail || 'Gagal mengosongkan bucket') })
+      .finally(() => setEmptying(false))
   }
 
   const isEmpty = objects.length === 0
@@ -691,6 +684,7 @@ export default function BucketDetailPage() {
         onSubmit={(pin) => confirmDeleteBucket(pin)}
         onClose={() => { setPinOpen(false); setPinErr('') }}
       />
+      {pinModal}
     </div>
   )
 }

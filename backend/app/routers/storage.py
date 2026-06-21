@@ -182,7 +182,9 @@ def create_bucket_endpoint(
     body: BucketCreateRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    x_transaction_pin: str | None = Header(default=None, alias="X-Transaction-PIN"),
 ):
+    require_pin(current_user, x_transaction_pin)
     sub = _get_active_subscription(current_user.id, db)
     _require_can_add(sub)
 
@@ -489,7 +491,9 @@ def delete_file(
     object_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    x_transaction_pin: str | None = Header(default=None, alias="X-Transaction-PIN"),
 ):
+    require_pin(current_user, x_transaction_pin)
     sub = _get_active_subscription(current_user.id, db)
     bucket = _get_bucket_or_404(bucket_name, current_user.id, db)
 
@@ -542,7 +546,9 @@ def empty_bucket(
     bucket_name: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    x_transaction_pin: str | None = Header(default=None, alias="X-Transaction-PIN"),
 ):
+    require_pin(current_user, x_transaction_pin)
     sub = _get_active_subscription(current_user.id, db)
     bucket = _get_bucket_or_404(bucket_name, current_user.id, db)
 

@@ -56,9 +56,8 @@ const ADMIN_NAV = [
   { path: '/admin', label: 'Dasbor', icon: GridIcon },
   { path: '/admin/monitoring', label: 'Monitoring Sumber Daya', icon: ChartIcon },
   { path: '/admin/pengguna', label: 'Manajemen Pengguna', icon: UsersIcon },
-  { path: '/admin/paket', label: 'Paket Layanan', icon: PackageIcon },
   { path: '/admin/langganan', label: 'Langganan', icon: CardIcon },
-  { path: '/admin/transaksi', label: 'Riwayat Transaksi', icon: ReceiptIcon },
+  { path: '/admin/transaksi', label: 'Riwayat Langganan', icon: ReceiptIcon },
   { path: '/admin/logs', label: 'Log Sistem', icon: LogIcon },
   { path: '/admin/audit', label: 'Audit Admin', icon: AuditIcon },
   { path: '/admin/keys', label: 'Access Keys Global', icon: KeyIcon },
@@ -135,11 +134,6 @@ export default function AdminNav({ breadcrumbs = [] }) {
           )}
         </div>
         <div className="adm-navbar-right">
-          <div className="adm-search-bar">
-            <SearchIcon />
-            <input type="text" placeholder="Cari..." className="adm-search-input" />
-          </div>
-          <button className="adm-icon-btn adm-notif-btn" aria-label="Notifikasi"><BellIcon /><span className="adm-notif-dot" /></button>
           <div className="adm-avatar-wrapper" ref={dropdownRef}>
             <button className="adm-icon-btn adm-avatar-btn" onClick={() => setDropdownOpen(v => !v)} aria-label="Profil"><UserIcon /></button>
             {dropdownOpen && (

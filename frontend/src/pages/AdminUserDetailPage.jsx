@@ -18,7 +18,7 @@ function fmtBytes(b) {
 function fmtDateTime(s) {
   if (!s) return '-'
   const d = parseUTC(s)
-  return `${d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}, ${d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}`
+  return `${d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} · ${d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}`
 }
 
 export default function AdminUserDetailPage() {

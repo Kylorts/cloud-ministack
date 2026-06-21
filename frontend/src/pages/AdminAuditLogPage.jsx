@@ -1,36 +1,55 @@
 import { useEffect, useState } from 'react'
 import { parseUTC } from '../utils/datetime'
 import AdminNav from '../components/AdminNav'
+import AdminPagination from '../components/AdminPagination'
 import { getAdminAudit } from '../services/admin'
 import { actionLabel } from '../utils/actionLabels'
+import { exportXlsx, exportPdf } from '../utils/exporters'
 import './AdminDashboardPage.css'
 import './AdminPages.css'
 
 function fmtDateTime(s) {
   const d = parseUTC(s)
-  return `${d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}, ${d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}`
+  return `${d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} · ${d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}`
 }
+
+const PAGE_SIZE = 15
 
 export default function AdminAuditLogPage() {
   const [rows, setRows] = useState([])
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [q, setQ] = useState('')
 
+  useEffect(() => { setPage(1) }, [q])
   useEffect(() => {
     const t = setTimeout(() => {
       setLoading(true)
-      getAdminAudit({ q }).then((r) => setRows(r.data)).catch(() => setRows([])).finally(() => setLoading(false))
+      getAdminAudit({ q, page, page_size: PAGE_SIZE })
+        .then((r) => { setRows(r.data.items); setTotal(r.data.total) })
+        .catch(() => { setRows([]); setTotal(0) }).finally(() => setLoading(false))
     }, 200)
     return () => clearTimeout(t)
-  }, [q])
+  }, [q, page])
 
-  function exportCsv() {
-    const header = ['Waktu', 'Admin Pelaku', 'Klien Terdampak', 'Aksi', 'Alasan/Catatan']
-    const lines = rows.map((r) => [fmtDateTime(r.created_at), r.admin_name, r.affected, actionLabel(r.action), r.note])
-    const csv = [header, ...lines].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n')
-    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }))
-    const a = document.createElement('a'); a.href = url; a.download = 'audit-admin.csv'; a.click()
-    URL.revokeObjectURL(url)
+  const [exporting, setExporting] = useState(false)
+  const EXPORT_HEADERS = ['Waktu', 'Admin Pelaku', 'Klien Terdampak', 'Aksi', 'Alasan/Catatan']
+
+  async function doExport(kind) {
+    setExporting(true)
+    try {
+      // Ambil SEMUA baris yang cocok dengan pencarian saat ini (bukan hanya halaman aktif).
+      const r = await getAdminAudit({ q, page: 1, page_size: 100000 })
+      const all = r.data?.items ?? rows
+      const body = all.map((x) => [fmtDateTime(x.created_at), x.admin_name, x.affected, actionLabel(x.action), x.note])
+      if (kind === 'xlsx') exportXlsx('audit-admin', 'Audit Admin', EXPORT_HEADERS, body)
+      else exportPdf('audit-admin', 'Audit Tindakan Administrator', EXPORT_HEADERS, body)
+    } catch {
+      alert('Gagal mengekspor.')
+    } finally {
+      setExporting(false)
+    }
   }
 
   return (
@@ -47,7 +66,8 @@ export default function AdminAuditLogPage() {
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M21 21L16.5 16.5M19 10.5a8.5 8.5 0 1 1-17 0 8.5 8.5 0 0 1 17 0Z" stroke="#9CA3AF" strokeWidth="2" strokeLinecap="round"/></svg>
               <input placeholder="Cari log..." value={q} onChange={(e) => setQ(e.target.value)} />
             </div>
-            <button className="adm-btn-ghost" onClick={exportCsv}>↓ Ekspor CSV</button>
+            <button className="adm-btn-ghost" onClick={() => doExport('xlsx')} disabled={exporting}>{exporting ? '...' : '↓ Excel'}</button>
+            <button className="adm-btn-ghost" onClick={() => doExport('pdf')} disabled={exporting}>{exporting ? '...' : '↓ PDF'}</button>
           </div>
         </div>
 
@@ -70,7 +90,7 @@ export default function AdminAuditLogPage() {
               ))}
             </tbody>
           </table>
-          {!loading && <div className="adm-pagi"><span>Menampilkan {rows.length} log</span></div>}
+          {!loading && <AdminPagination page={page} pageSize={PAGE_SIZE} total={total} onPage={setPage} label="log" />}
         </div>
       </main>
     </div>

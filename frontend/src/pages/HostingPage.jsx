@@ -5,6 +5,7 @@ import Navbar from '../components/Navbar'
 import DormantNotice from '../components/DormantNotice'
 import { getSites, createSite, getHostingUsage } from '../services/hosting'
 import { getSubscriptionHistory, categoryState } from '../services/subscriptions'
+import { usePinPrompt } from '../utils/usePinPrompt'
 import './HostingPage.css'
 
 function PlusIcon() {
@@ -46,6 +47,7 @@ function CreateSiteModal({ onClose, onSuccess }) {
   const [nameError, setNameError] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const { run: runPin, pinModal } = usePinPrompt({ title: 'Buat Situs', description: 'Masukkan PIN Transaksi untuk membuat situs.' })
 
   function handleNameChange(e) {
     // Hanya karakter yang valid untuk URL situs: huruf kecil, angka, tanda hubung.
@@ -54,19 +56,16 @@ function CreateSiteModal({ onClose, onSuccess }) {
     setNameError(validateSiteName(val))
   }
 
-  async function handleSubmit(e) {
+  function handleSubmit(e) {
     e.preventDefault()
     setError('')
-    setLoading(true)
-    try {
-      await createSite(name)
-      onSuccess()
-    } catch (err) {
-      const detail = err.response?.data?.detail
-      setError(Array.isArray(detail) ? detail[0]?.msg : (detail || 'Gagal membuat situs'))
-    } finally {
-      setLoading(false)
-    }
+    runPin((pin) => createSite(name, pin))
+      .then(() => onSuccess())
+      .catch((err) => {
+        if (err?.pinCancelled) return
+        const detail = err.response?.data?.detail
+        setError(Array.isArray(detail) ? detail[0]?.msg : (typeof detail === 'string' ? detail : 'Gagal membuat situs'))
+      })
   }
 
   return (
@@ -100,6 +99,7 @@ function CreateSiteModal({ onClose, onSuccess }) {
           </div>
         </form>
       </div>
+      {pinModal}
     </div>
   )
 }
@@ -151,6 +151,17 @@ export default function HostingPage() {
 
   const siteCount = usage?.site_count ?? sites.length
   const siteLimit = usage?.site_limit ?? 0
+  const siteLimitReached = siteLimit > 0 && siteCount >= siteLimit
+  const subStatus = usage?.subscription_status
+  const addBlocked = subStatus === 'over_quota' || subStatus === 'suspended'
+  const createSiteDisabled = siteLimitReached || addBlocked
+  const createSiteTitle = subStatus === 'suspended'
+    ? 'Langganan disuspend — tidak bisa membuat situs'
+    : subStatus === 'over_quota'
+      ? 'Kuota terlampaui (OVER_QUOTA) — tidak bisa membuat situs'
+      : siteLimitReached
+        ? `Batas ${siteLimit} situs tercapai — upgrade paket atau hapus situs lain`
+        : 'Buat situs baru'
   const bwUsed = usage?.bandwidth_used_bytes ?? 0
   const bwLimit = usage?.bandwidth_limit_bytes ?? 0
   const bwPercent = bwLimit ? Math.min(100, Math.round((bwUsed / bwLimit) * 100)) : 0
@@ -168,7 +179,7 @@ export default function HostingPage() {
             <h1 className="hosting-title">Static Hosting</h1>
             <p className="hosting-subtitle">Kelola dan deploy website statis Anda.</p>
           </div>
-          <button className="btn-create-site" onClick={() => setShowModal(true)}>
+          <button className="btn-create-site" onClick={() => setShowModal(true)} disabled={createSiteDisabled} title={createSiteTitle}>
             <PlusIcon /> Buat Situs Baru
           </button>
         </div>

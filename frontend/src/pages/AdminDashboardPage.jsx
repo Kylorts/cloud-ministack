@@ -39,9 +39,9 @@ export default function AdminDashboardPage() {
     Promise.all([
       getAdminStats().catch(() => ({ data: null })),
       getAdminResources().catch(() => ({ data: [] })),
-      getAdminAccessKeys().catch(() => ({ data: [] })),
+      getAdminAccessKeys({ page: 1, page_size: 5 }).catch(() => ({ data: { items: [] } })),
     ]).then(([s, r, k]) => {
-      setStats(s.data); setResources(r.data || []); setKeys(k.data || [])
+      setStats(s.data); setResources(r.data || []); setKeys(k.data?.items || [])
     }).finally(() => setLoading(false))
   }, [])
 

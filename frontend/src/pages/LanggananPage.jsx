@@ -81,9 +81,9 @@ function SubBlock({ category, sub, storageUsage, hostingUsage, navigate, onCance
           </div>
         )}
 
-        {CANCELLABLE.includes(sub.status) && (
+        {CANCELLABLE.includes(sub.status) && sub.plan.price > 0 && (
           <button className="lan-cancel-btn" onClick={() => onCancel(category, sub)} disabled={cancelling}>
-            ⊘ Batalkan Langganan
+            ⊘ Turun ke Paket Free
           </button>
         )}
       </div>
@@ -269,23 +269,23 @@ export default function LanggananPage() {
         <div className="modal-overlay" onClick={() => !cancelling && setCancelTarget(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2 className="modal-title">Batalkan Langganan {cancelLabel}</h2>
+              <h2 className="modal-title">Turun ke Paket Free {cancelLabel}</h2>
               <button className="modal-close" onClick={() => setCancelTarget(null)}>✕</button>
             </div>
             <div className="lan-cancel-body">
               <p className="lan-cancel-text">
-                Hentikan langganan <strong>{cancelTarget.sub.plan.name}</strong>?
+                Turunkan langganan <strong>{cancelTarget.sub.plan.name}</strong> ke <strong>paket Free</strong>?
               </p>
               <ul className="lan-cancel-list">
-                <li>Layanan langsung <strong>tidak bisa diakses</strong>.</li>
-                <li>{cancelResource === 'situs' ? 'Situs' : 'Bucket'} Anda menjadi <strong>nonaktif (dorman)</strong> — data <strong>tidak dihapus</strong> dan muncul lagi saat berlangganan ulang.</li>
-                <li>Semua <strong>access key {cancelLabel}</strong> akan <strong>dicabut permanen</strong>.</li>
+                <li>Anda <strong>tetap berlangganan</strong>, tetapi di paket <strong>Free</strong> (kapasitas lebih kecil).</li>
+                <li>{cancelResource === 'situs' ? 'Situs' : 'Bucket'} &amp; data <strong>tidak dihapus</strong>. Jika pemakaian melebihi limit Free → status <strong>OVER_QUOTA</strong> (hanya bisa lihat/hapus sampai dirapikan).</li>
+                <li>Access key <strong>tetap aktif</strong> (langganan berlanjut).</li>
               </ul>
             </div>
             <div className="modal-actions">
               <button className="modal-btn-cancel" onClick={() => setCancelTarget(null)} disabled={cancelling}>Batal</button>
               <button className="modal-btn-delete" onClick={() => doCancel(cancelTarget.category)} disabled={cancelling}>
-                {cancelling ? 'Membatalkan...' : 'Ya, Hentikan'}
+                {cancelling ? 'Memproses...' : 'Ya, Turun ke Free'}
               </button>
             </div>
           </div>
@@ -294,8 +294,8 @@ export default function LanggananPage() {
 
       <PinPromptModal
         open={pinOpen}
-        title="Batalkan Langganan"
-        description="Masukkan PIN Transaksi untuk membatalkan langganan ini."
+        title="Turun ke Paket Free"
+        description="Masukkan PIN Transaksi untuk menurunkan langganan ke paket Free."
         error={pinErr}
         busy={cancelling}
         onSubmit={(pin) => doCancel(pinCategory, pin)}

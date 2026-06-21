@@ -24,8 +24,8 @@ from app.schemas.admin import (
     AdminAccessKeyItem, AdminActivityItem, AdminAuditItem, AdminBucketDetail, AdminBucketObject,
     AdminBucketRow, AdminLogItem, AdminLogPage, AdminMonitoring, AdminPlanChange, AdminPlanItem,
     AdminPlanWrite, AdminResourceItem, AdminSiteRow, AdminSubscriptionDetail, AdminSubscriptionItem,
-    AdminTopUser, AdminTransactionDetail, AdminTransactionItem, AdminUserDetail, AdminUserItem,
-    AdminUserResource, ChangePlanRequest, IamPolicyItem, IamPolicyWrite, StatsResponse,
+    AdminSubHistoryItem, AdminTopUser, AdminTransactionDetail, AdminTransactionItem, AdminUserDetail, AdminUserItem,
+    AdminUserResource, ChangePlanRequest, IamPolicyItem, IamPolicyWrite, Page, StatsResponse,
     StatusUpdateRequest,
 )
 
@@ -129,15 +129,24 @@ def list_resources(db: Session = Depends(get_db), _: User = Depends(get_admin_us
     return items
 
 
-@router.get("/access-keys", response_model=list[AdminAccessKeyItem])
-def list_access_keys(db: Session = Depends(get_db), _: User = Depends(get_admin_user)):
-    keys = db.query(AccessKey).order_by(AccessKey.created_at.desc()).limit(50).all()
-    out: list[AdminAccessKeyItem] = []
+@router.get("/access-keys", response_model=Page[AdminAccessKeyItem])
+def list_access_keys(q: str = Query(""), page: int = Query(1), page_size: int = Query(15),
+                     db: Session = Depends(get_db), _: User = Depends(get_admin_user)):
+    keys = db.query(AccessKey).order_by(AccessKey.created_at.desc()).all()
+    matched = []
     for k in keys:
         owner = db.get(User, k.user_id)
+        owner_name = owner.name if owner else "-"
+        if q and q.lower() not in k.access_key_id.lower() and q.lower() not in owner_name.lower():
+            continue
+        matched.append((k, owner_name))
+    total = len(matched)
+    start = max(page - 1, 0) * page_size
+    out: list[AdminAccessKeyItem] = []
+    for k, owner_name in matched[start:start + page_size]:
         out.append(AdminAccessKeyItem(
             id=k.id, access_key_id=k.access_key_id,
-            owner_name=owner.name if owner else "-",
+            owner_name=owner_name,
             status=k.status.value if hasattr(k.status, "value") else k.status,
             category=k.category,
             permission=k.permission.value if hasattr(k.permission, "value") else k.permission,
@@ -145,7 +154,7 @@ def list_access_keys(db: Session = Depends(get_db), _: User = Depends(get_admin_
             last_used_at=k.last_used_at,
             created_at=k.created_at,
         ))
-    return out
+    return Page[AdminAccessKeyItem](items=out, total=total)
 
 
 # ════════ Helpers ════════
@@ -174,9 +183,18 @@ def _user_storage_used(db: Session, user_id: int) -> int:
 
 # ════════ Fase B: Manajemen Pengguna ════════
 
-@router.get("/users", response_model=list[AdminUserItem])
-def list_users(db: Session = Depends(get_db), _: User = Depends(get_admin_user)):
-    users = db.query(User).order_by(User.created_at.desc()).all()
+@router.get("/users", response_model=Page[AdminUserItem])
+def list_users(q: str = Query(""), page: int = Query(1), page_size: int = Query(15),
+               db: Session = Depends(get_db), _: User = Depends(get_admin_user)):
+    from sqlalchemy import or_
+    # Manajemen Pengguna = daftar KLIEN; akun admin tidak ditampilkan.
+    base = db.query(User).filter(User.role == UserRole.user)
+    if q:
+        like = f"%{q}%"
+        base = base.filter(or_(User.name.like(like), User.email.like(like)))
+    base = base.order_by(User.created_at.desc())
+    total = base.count()
+    users = base.offset(max(page - 1, 0) * page_size).limit(page_size).all()
     out = []
     for u in users:
         sub = _active_sub(db, u.id, "storage") or _active_sub(db, u.id, "hosting")
@@ -185,13 +203,13 @@ def list_users(db: Session = Depends(get_db), _: User = Depends(get_admin_user))
             role=u.role.value, status=u.status.value,
             plan_name=sub.plan.name if sub else None, created_at=u.created_at,
         ))
-    return out
+    return Page[AdminUserItem](items=out, total=total)
 
 
 @router.get("/users/{user_id}", response_model=AdminUserDetail)
 def user_detail(user_id: int, db: Session = Depends(get_db), _: User = Depends(get_admin_user)):
     u = db.get(User, user_id)
-    if not u:
+    if not u or u.role == UserRole.admin:
         raise HTTPException(status_code=404, detail="Pengguna tidak ditemukan")
 
     storage_sub = _active_sub(db, u.id, "storage")
@@ -265,109 +283,48 @@ def set_user_status(user_id: int, body: StatusUpdateRequest,
     return {"message": f"Status pengguna diubah menjadi {body.status}."}
 
 
-# ════════ Fase C: Manajemen Paket ════════
-
-def _plan_item(db: Session, p: ServicePlan) -> AdminPlanItem:
-    cnt = db.query(Subscription).filter(
-        Subscription.plan_id == p.id, Subscription.status.in_(ACTIVE_LIKE_STATUSES)).count()
-    return AdminPlanItem(
-        id=p.id, name=p.name, category=p.category.value, price=float(p.price),
-        storage_limit_bytes=p.storage_limit_bytes, max_file_size_bytes=p.max_file_size_bytes,
-        bandwidth_limit_bytes=p.bandwidth_limit_bytes, bucket_limit=p.bucket_limit,
-        static_site_limit=p.static_site_limit, access_key_limit=p.access_key_limit,
-        is_active=p.is_active, subscriber_count=cnt,
-    )
-
-
-@router.get("/plans", response_model=list[AdminPlanItem])
-def list_plans(db: Session = Depends(get_db), _: User = Depends(get_admin_user)):
-    plans = db.query(ServicePlan).order_by(ServicePlan.category, ServicePlan.price).all()
-    return [_plan_item(db, p) for p in plans]
-
-
-def _apply_plan(p: ServicePlan, body: AdminPlanWrite):
-    if body.category not in ("storage", "hosting"):
-        raise HTTPException(status_code=400, detail="Kategori harus storage atau hosting.")
-    p.name = body.name.strip()
-    p.category = PlanCategory(body.category)
-    p.price = body.price
-    p.storage_limit_bytes = body.storage_limit_bytes
-    p.max_file_size_bytes = body.max_file_size_bytes
-    p.bandwidth_limit_bytes = body.bandwidth_limit_bytes
-    p.bucket_limit = body.bucket_limit
-    p.static_site_limit = body.static_site_limit
-    p.access_key_limit = body.access_key_limit
-    p.is_active = body.is_active
-
-
-@router.post("/plans", response_model=AdminPlanItem, status_code=201)
-def create_plan(body: AdminPlanWrite, db: Session = Depends(get_db), admin: User = Depends(get_admin_user)):
-    p = ServicePlan(name="", category=PlanCategory.storage, price=0)
-    _apply_plan(p, body)
-    db.add(p)
-    log_activity(db, actor_user_id=admin.id, actor_type=ActorType.admin,
-                 action="PLAN_CREATED", description=f"Admin membuat paket {body.name}")
-    db.commit(); db.refresh(p)
-    return _plan_item(db, p)
-
-
-@router.put("/plans/{plan_id}", response_model=AdminPlanItem)
-def update_plan(plan_id: int, body: AdminPlanWrite,
-                db: Session = Depends(get_db), admin: User = Depends(get_admin_user)):
-    p = db.get(ServicePlan, plan_id)
-    if not p:
-        raise HTTPException(status_code=404, detail="Paket tidak ditemukan")
-    _apply_plan(p, body)
-    log_activity(db, actor_user_id=admin.id, actor_type=ActorType.admin,
-                 action="PLAN_UPDATED", description=f"Admin mengubah paket {p.name}")
-    db.commit(); db.refresh(p)
-    return _plan_item(db, p)
-
-
-@router.delete("/plans/{plan_id}", status_code=200)
-def delete_plan(plan_id: int, db: Session = Depends(get_db), admin: User = Depends(get_admin_user)):
-    p = db.get(ServicePlan, plan_id)
-    if not p:
-        raise HTTPException(status_code=404, detail="Paket tidak ditemukan")
-    used = db.query(Subscription).filter(Subscription.plan_id == plan_id).count()
-    if used > 0:
-        raise HTTPException(
-            status_code=409,
-            detail="Paket dipakai/pernah dipakai langganan. Nonaktifkan saja, jangan hapus.",
-        )
-    name = p.name
-    db.delete(p)
-    log_activity(db, actor_user_id=admin.id, actor_type=ActorType.admin,
-                 action="PLAN_DELETED", description=f"Admin menghapus paket {name}")
-    db.commit()
-    return {"message": "Paket dihapus."}
+# ════════ Fase C: Manajemen Paket — DIHAPUS ════════
+# Admin TIDAK punya wewenang apa pun atas katalog paket: tidak ada list/create/
+# update/delete dan tidak ada force-change-plan. Harga & limit paket = konfigurasi
+# tingkat-sistem (seed/kode). Keputusan keamanan: mencegah penyalahgunaan global
+# (insider threat) — admin nakal tak bisa mengubah kuota/harga seluruh pelanggan
+# maupun memindah paket seseorang.
 
 
 # ════════ Fase D: Langganan ════════
 
-@router.get("/subscriptions", response_model=list[AdminSubscriptionItem])
+@router.get("/subscriptions", response_model=Page[AdminSubscriptionItem])
 def list_subscriptions(status_f: str = Query("all", alias="status"),
+                       q: str = Query(""), page: int = Query(1), page_size: int = Query(15),
                        db: Session = Depends(get_db), _: User = Depends(get_admin_user)):
-    q = db.query(Subscription)
+    query = db.query(Subscription)
     if status_f == "active":
-        q = q.filter(Subscription.status == SubscriptionStatus.active)
+        query = query.filter(Subscription.status == SubscriptionStatus.active)
     elif status_f == "over_quota":
-        q = q.filter(Subscription.status == SubscriptionStatus.over_quota)
+        query = query.filter(Subscription.status == SubscriptionStatus.over_quota)
     elif status_f == "past_due":
-        q = q.filter(Subscription.status == SubscriptionStatus.past_due)
+        query = query.filter(Subscription.status == SubscriptionStatus.past_due)
     else:
-        q = q.filter(Subscription.status.in_(ACTIVE_LIKE_STATUSES))
-    subs = q.order_by(Subscription.created_at.desc()).all()
-    out = []
+        query = query.filter(Subscription.status.in_(ACTIVE_LIKE_STATUSES))
+    subs = query.order_by(Subscription.created_at.desc()).all()
+    # Filter cari (nama klien / paket / kategori) lalu paginasi.
+    rows = []
     for s in subs:
         owner = db.get(User, s.user_id)
-        out.append(AdminSubscriptionItem(
-            id=s.id, client_name=owner.name if owner else "-", plan_name=s.plan.name,
+        client_name = owner.name if owner else "-"
+        if q:
+            ql = q.lower()
+            if ql not in client_name.lower() and ql not in s.plan.name.lower() and ql not in s.category.lower():
+                continue
+        rows.append(AdminSubscriptionItem(
+            id=s.id, client_name=client_name, plan_name=s.plan.name,
             category=s.category, status=s.status.value,
             current_period_end=s.current_period_end,
             scheduled_change=(f"Downgrade → {s.scheduled_plan.name}" if s.scheduled_plan_id else None),
         ))
-    return out
+    total = len(rows)
+    start = max(page - 1, 0) * page_size
+    return Page[AdminSubscriptionItem](items=rows[start:start + page_size], total=total)
 
 
 @router.get("/subscriptions/{sub_id}", response_model=AdminSubscriptionDetail)
@@ -483,20 +440,16 @@ def admin_expire_grace(sub_id: int, db: Session = Depends(get_db), admin: User =
     }
 
 
-@router.post("/subscriptions/{sub_id}/change-plan", status_code=200)
-def admin_change_plan(sub_id: int, body: ChangePlanRequest,
-                      db: Session = Depends(get_db), admin: User = Depends(get_admin_user)):
+@router.post("/subscriptions/{sub_id}/repair", status_code=200)
+def admin_repair_subscription(sub_id: int, db: Session = Depends(get_db), admin: User = Depends(get_admin_user)):
+    """Perbaiki langganan: hitung ulang counter pemakaian dari data nyata + evaluasi status.
+
+    Membereskan 'error langganan' seperti angka kuota drift atau OVER_QUOTA yang nyangkut.
+    Non-destruktif (tidak mengubah paket/harga).
+    """
     s = db.get(Subscription, sub_id)
     if not s:
         raise HTTPException(status_code=404, detail="Langganan tidak ditemukan")
-    plan = db.get(ServicePlan, body.plan_id)
-    if not plan:
-        raise HTTPException(status_code=404, detail="Paket tidak ditemukan")
-    if plan.category.value != s.category:
-        raise HTTPException(status_code=400, detail="Paket harus kategori yang sama dengan langganan.")
-
-    old_name = s.plan.name
-    s.plan = plan  # set relationship (bukan hanya plan_id) agar evaluate_quota_status pakai plan baru
     if s.category == "hosting":
         usage_helper.recalculate_hosting(db, s)
     else:
@@ -504,65 +457,50 @@ def admin_change_plan(sub_id: int, body: ChangePlanRequest,
     usage_helper.evaluate_quota_status(db, s)
     log_activity(
         db, actor_user_id=admin.id, actor_type=ActorType.admin,
-        action="ADMIN_PLAN_CHANGE",
-        description=f"Admin mengubah paket dari {old_name} ke {plan.name}",
+        action="SUBSCRIPTION_REPAIRED",
+        description=f"Admin memperbaiki (recalc) langganan {s.plan.name}",
         target_type="SUBSCRIPTION", target_id=s.id,
     )
     db.commit()
-    return {"message": f"Paket langganan diubah ke {plan.name}."}
+    return {"message": f"Langganan diperbaiki — counter dihitung ulang, status: {s.status.value}."}
 
 
-# ════════ Fase E: Transaksi (DUMMY / simulasi — Midtrans belum terintegrasi) ════════
-# Data dibangkitkan dari langganan nyata agar realistis, TIDAK tersimpan & TIDAK
-# memanggil Midtrans sungguhan. Hanya untuk tampilan/placeholder.
-
-def _tx_from_sub(db: Session, s: Subscription) -> dict:
-    owner = db.get(User, s.user_id)
-    paid = s.status in (SubscriptionStatus.active, SubscriptionStatus.over_quota)
-    return {
-        "id": s.id,
-        "invoice_no": f"INV-{s.current_period_start.year}-{s.id:03d}",
-        "client_name": owner.name if owner else "-",
-        "amount": float(s.plan.price),
-        "invoice_status": "PAID" if paid else "UNPAID",
-        "midtrans_status": "settlement" if paid else "pending",
-        "method": "QRIS" if s.id % 2 == 0 else "BVA",
-        "date": s.current_period_start,
-    }
+# Force Change Plan (admin memindah paket langganan klien) DIHAPUS — rawan disalahgunakan
+# admin (mis. menurunkan paket klien sepihak). Perubahan paket hanya boleh dilakukan
+# oleh KLIEN sendiri lewat upgrade/downgrade.
 
 
-@router.get("/transactions", response_model=list[AdminTransactionItem])
-def list_transactions(db: Session = Depends(get_db), _: User = Depends(get_admin_user)):
-    subs = (
-        db.query(Subscription)
-        .filter(Subscription.status.in_(ACTIVE_LIKE_STATUSES))
-        .order_by(Subscription.created_at.desc())
+# ════════ Riwayat Langganan (dulu "Transaksi") ════════
+# Pembayaran di-descope → halaman ini menjadi riwayat EVENT langganan berhasil
+# yang diambil dari activity log (berlangganan/upgrade/downgrade), bukan invoice dummy.
+
+_SUB_EVENT_ACTIONS = ["PACKAGE_SUBSCRIBED", "PACKAGE_UPGRADED", "PACKAGE_DOWNGRADED"]
+
+
+@router.get("/subscription-history", response_model=Page[AdminSubHistoryItem])
+def subscription_history(q: str = Query(""), page: int = Query(1), page_size: int = Query(15),
+                         db: Session = Depends(get_db), _: User = Depends(get_admin_user)):
+    logs = (
+        db.query(ActivityLog)
+        .filter(ActivityLog.action.in_(_SUB_EVENT_ACTIONS))
+        .order_by(ActivityLog.created_at.desc())
         .all()
     )
-    return [AdminTransactionItem(**_tx_from_sub(db, s)) for s in subs]
-
-
-@router.get("/transactions/{sub_id}", response_model=AdminTransactionDetail)
-def transaction_detail(sub_id: int, db: Session = Depends(get_db), _: User = Depends(get_admin_user)):
-    s = db.get(Subscription, sub_id)
-    if not s:
-        raise HTTPException(status_code=404, detail="Transaksi tidak ditemukan")
-    base = _tx_from_sub(db, s)
-    midtrans_id = f"MID-{s.id:06d}-SIM"
-    raw = {
-        "transaction_time": s.current_period_start.strftime("%Y-%m-%d %H:%M:%S"),
-        "transaction_status": base["midtrans_status"],
-        "transaction_id": midtrans_id,
-        "status_message": "midtrans payment notification (SIMULASI)",
-        "status_code": "200" if base["invoice_status"] == "PAID" else "201",
-        "payment_type": base["method"].lower(),
-        "order_id": base["invoice_no"],
-        "gross_amount": f"{base['amount']:.2f}",
-        "fraud_status": "accept",
-        "currency": "IDR",
-        "_note": "Data simulasi — Midtrans belum diintegrasikan.",
-    }
-    return AdminTransactionDetail(**base, midtrans_id=midtrans_id, raw_notification=raw)
+    rows = []
+    for a in logs:
+        owner = db.get(User, a.actor_user_id) if a.actor_user_id else None
+        client = owner.name if owner else "-"
+        if q:
+            ql = q.lower()
+            if ql not in client.lower() and ql not in (a.description or "").lower():
+                continue
+        rows.append(AdminSubHistoryItem(
+            id=a.id, client_name=client, action=a.action,
+            detail=a.description, created_at=a.created_at,
+        ))
+    total = len(rows)
+    start = max(page - 1, 0) * page_size
+    return Page[AdminSubHistoryItem](items=rows[start:start + page_size], total=total)
 
 
 # ════════ Fase F: Monitoring Sumber Daya ════════
@@ -611,20 +549,26 @@ def monitoring(db: Session = Depends(get_db), _: User = Depends(get_admin_user))
     )
 
 
-@router.get("/storage-buckets", response_model=list[AdminBucketRow])
-def all_buckets(q: str = Query("", alias="q"),
+@router.get("/storage-buckets", response_model=Page[AdminBucketRow])
+def all_buckets(q: str = Query("", alias="q"), page: int = Query(1), page_size: int = Query(15),
                 db: Session = Depends(get_db), _: User = Depends(get_admin_user)):
     buckets = (
         db.query(StorageBucket)
-        .filter(StorageBucket.status == BucketStatus.active)
+        .filter(StorageBucket.status != BucketStatus.deleted)  # termasuk creating/failed agar bisa diperbaiki
         .order_by(StorageBucket.created_at.desc()).all()
     )
-    out = []
+    # Filter (nama bucket / pemilik) lalu paginasi di sisi server.
+    matched = []
     for b in buckets:
         owner = db.get(User, b.user_id)
         owner_name = owner.name if owner else "-"
         if q and q.lower() not in b.display_name.lower() and q.lower() not in owner_name.lower():
             continue
+        matched.append((b, owner_name))
+    total = len(matched)
+    start = max(page - 1, 0) * page_size
+    out = []
+    for b, owner_name in matched[start:start + page_size]:
         stats = (
             db.query(func.count(StorageObject.id), func.coalesce(func.sum(StorageObject.size_bytes), 0))
             .filter(StorageObject.bucket_id == b.id, StorageObject.status == ObjectStatus.available)
@@ -633,9 +577,10 @@ def all_buckets(q: str = Query("", alias="q"),
         out.append(AdminBucketRow(
             id=b.id, name=b.display_name, owner_name=owner_name,
             object_count=int(stats[0]) if stats else 0,
-            total_size_bytes=int(stats[1]) if stats else 0, status="active",
+            total_size_bytes=int(stats[1]) if stats else 0,
+            status=b.status.value if hasattr(b.status, "value") else b.status,
         ))
-    return out
+    return Page[AdminBucketRow](items=out, total=total)
 
 
 @router.get("/storage-buckets/{bucket_id}", response_model=AdminBucketDetail)
@@ -657,20 +602,65 @@ def bucket_detail(bucket_id: int, db: Session = Depends(get_db), _: User = Depen
     )
 
 
-@router.get("/hosting-sites", response_model=list[AdminSiteRow])
-def all_sites(q: str = Query("", alias="q"),
+@router.post("/storage-buckets/{bucket_id}/repair", status_code=200)
+def admin_repair_bucket(bucket_id: int, db: Session = Depends(get_db), admin: User = Depends(get_admin_user)):
+    """Perbaiki bucket: pastikan ada di MiniStack, self-heal objek yang hilang,
+    betulkan status macet (creating/failed → active), lalu hitung ulang counter pemilik.
+    """
+    from app.core.ministack import get_s3_client, ensure_object_exists, _ensure_bucket_exists
+
+    b = db.query(StorageBucket).filter(StorageBucket.id == bucket_id).first()
+    if not b:
+        raise HTTPException(status_code=404, detail="Bucket tidak ditemukan")
+    if b.status == BucketStatus.deleted:
+        raise HTTPException(status_code=400, detail="Bucket sudah dihapus, tak bisa diperbaiki.")
+
+    s3 = get_s3_client()
+    _ensure_bucket_exists(s3, b.internal_name)
+    if b.status in (BucketStatus.creating, BucketStatus.failed):
+        b.status = BucketStatus.active
+
+    objs = db.query(StorageObject).filter(
+        StorageObject.bucket_id == b.id, StorageObject.status == ObjectStatus.available).all()
+    synced = 0
+    for o in objs:
+        if ensure_object_exists(s3, b.internal_name, o.object_key, o.content_type):
+            synced += 1
+
+    sub = _active_sub(db, b.user_id, "storage")
+    if sub:
+        usage_helper.recalculate(db, sub)
+        usage_helper.evaluate_quota_status(db, sub)
+
+    log_activity(
+        db, actor_user_id=admin.id, actor_type=ActorType.admin,
+        action="BUCKET_REPAIRED",
+        description=f"Admin memperbaiki bucket '{b.display_name}' ({synced} objek tersinkron)",
+        target_type="BUCKET", target_id=b.id,
+    )
+    db.commit()
+    return {"message": f"Bucket diperbaiki — {synced} objek tersinkron, status: {b.status.value}."}
+
+
+@router.get("/hosting-sites", response_model=Page[AdminSiteRow])
+def all_sites(q: str = Query("", alias="q"), page: int = Query(1), page_size: int = Query(15),
               db: Session = Depends(get_db), _: User = Depends(get_admin_user)):
     sites = (
         db.query(StaticSite)
         .filter(StaticSite.status == SiteStatus.active)
         .order_by(StaticSite.created_at.desc()).all()
     )
-    out = []
+    matched = []
     for s in sites:
         owner = db.get(User, s.user_id)
         owner_name = owner.name if owner else "-"
         if q and q.lower() not in s.site_name.lower() and q.lower() not in owner_name.lower():
             continue
+        matched.append((s, owner_name))
+    total = len(matched)
+    start = max(page - 1, 0) * page_size
+    out = []
+    for s, owner_name in matched[start:start + page_size]:
         last_dep = None
         if s.active_deployment_id:
             dep = db.get(StaticSiteDeployment, s.active_deployment_id)
@@ -680,7 +670,7 @@ def all_sites(q: str = Query("", alias="q"),
             id=s.id, name=s.site_name, owner_name=owner_name,
             url=f"{MON_BASE_URL}/sites/{s.slug}/", last_deployed_at=last_dep, status="active",
         ))
-    return out
+    return Page[AdminSiteRow](items=out, total=total)
 
 
 # ════════ Fase G: Keamanan & Log Sistem ════════
@@ -752,25 +742,33 @@ def system_logs(actor: str = Query("all"), type_f: str = Query("all", alias="typ
     )
     items = []
     for a in rows:
-        if a.actor_type == ActorType.user and a.actor_user_id:
+        # Peran sebenarnya pelaku (untuk pill): resolusi dari user, bukan sekadar
+        # actor_type tersimpan — mis. login oleh admin tercatat actor_type=user,
+        # tapi pill harus tampil "Admin".
+        if a.actor_type == ActorType.system:
+            actor_name, actor_role = "Sistem", "system"
+        elif a.actor_user_id:
             owner = db.get(User, a.actor_user_id)
             actor_name = owner.name if owner else "User"
+            actor_role = "admin" if (owner and owner.role == UserRole.admin) else "user"
         else:
             actor_name = a.actor_type.value.capitalize()
+            actor_role = a.actor_type.value
         items.append(AdminLogItem(
-            id=a.id, actor_type=a.actor_type.value, actor_name=actor_name,
+            id=a.id, actor_type=a.actor_type.value, actor_role=actor_role, actor_name=actor_name,
             action=a.action, target=_log_target(a), ip_address=a.ip_address,
             created_at=a.created_at,
         ))
     return AdminLogPage(items=items, total=total)
 
 
-@router.get("/audit", response_model=list[AdminAuditItem])
-def admin_audit(q: str = Query(""), page: int = Query(1), page_size: int = Query(30),
+@router.get("/audit", response_model=Page[AdminAuditItem])
+def admin_audit(q: str = Query(""), page: int = Query(1), page_size: int = Query(15),
                 db: Session = Depends(get_db), _: User = Depends(get_admin_user)):
     query = db.query(ActivityLog).filter(ActivityLog.actor_type == ActorType.admin)
     if q:
         query = query.filter(ActivityLog.description.like(f"%{q}%"))
+    total = query.count()
     rows = (
         query.order_by(ActivityLog.created_at.desc())
         .offset(max(page - 1, 0) * page_size).limit(page_size).all()
@@ -786,7 +784,7 @@ def admin_audit(q: str = Query(""), page: int = Query(1), page_size: int = Query
             note=a.description,
             created_at=a.created_at,
         ))
-    return out
+    return Page[AdminAuditItem](items=out, total=total)
 
 
 # ── IAM Policy (manajemen saja, belum di-enforce) ──

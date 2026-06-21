@@ -9,18 +9,19 @@ import './AdminPages.css'
 function fmtWhen(s) {
   const d = parseUTC(s); const now = new Date()
   const t = d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
-  if (d.toDateString() === now.toDateString()) return `Hari ini, ${t}`
+  if (d.toDateString() === now.toDateString()) return `${t} · Hari ini`
   const y = new Date(now); y.setDate(now.getDate() - 1)
-  if (d.toDateString() === y.toDateString()) return `Kemarin, ${t}`
-  return `${d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}, ${t}`
+  if (d.toDateString() === y.toDateString()) return `${t} · Kemarin`
+  return `${t} · ${d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}`
 }
-const ACTORS = [['all', 'Semua Aktor'], ['user', 'User'], ['admin', 'Admin'], ['system', 'System'], ['midtrans', 'Midtrans']]
+const ACTORS = [['all', 'Semua Aktor'], ['user', 'User'], ['admin', 'Admin'], ['system', 'System']]
 const TYPES = [['all', 'Semua Tipe'], ['storage', 'Storage'], ['hosting', 'Hosting'], ['key', 'Access Key'], ['security', 'Keamanan'], ['account', 'Akun'], ['billing', 'Langganan'], ['admin', 'Admin']]
 const PAGE_SIZE = 15
 
-function actorPill(t) {
-  const cls = t === 'user' ? 'adm-actor--user' : t === 'midtrans' ? 'adm-actor--midtrans' : t === 'admin' ? 'adm-actor--admin' : 'adm-actor--system'
-  return <span className={`adm-actor ${cls}`}>{t.charAt(0).toUpperCase() + t.slice(1)}</span>
+function actorPill(role) {
+  const cls = role === 'admin' ? 'adm-actor--admin' : role === 'system' ? 'adm-actor--system' : 'adm-actor--user'
+  const label = role === 'admin' ? 'Admin' : role === 'system' ? 'System' : 'User'
+  return <span className={`adm-actor ${cls}`}>{label}</span>
 }
 
 export default function AdminSystemLogsPage() {
@@ -70,16 +71,17 @@ export default function AdminSystemLogsPage() {
 
         <div className="adm-table-card">
           <table className="adm-table">
-            <thead><tr><th>Waktu</th><th>Aktor</th><th>Aksi</th><th>Target</th><th>IP Address</th></tr></thead>
+            <thead><tr><th>Waktu</th><th>Peran</th><th>Aktor</th><th>Aksi</th><th>Target</th><th>IP Address</th></tr></thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={5} className="adm-loading-cell">Memuat...</td></tr>
+                <tr><td colSpan={6} className="adm-loading-cell">Memuat...</td></tr>
               ) : data.items.length === 0 ? (
-                <tr><td colSpan={5} className="adm-empty-cell">Tidak ada log.</td></tr>
+                <tr><td colSpan={6} className="adm-empty-cell">Tidak ada log.</td></tr>
               ) : data.items.map((a) => (
                 <tr key={a.id}>
                   <td className="adm-util-cell">{fmtWhen(a.created_at)}</td>
-                  <td><div className="adm-name-cell">{actorPill(a.actor_type)}<span className="adm-instance-name">{a.actor_name}</span></div></td>
+                  <td>{actorPill(a.actor_role)}</td>
+                  <td className="adm-instance-name">{a.actor_name}</td>
                   <td><span className="adm-action-tag">{actionLabel(a.action)}</span></td>
                   <td className="adm-owner-cell">{a.target}</td>
                   <td className="adm-keyid">{a.ip_address || '-'}</td>

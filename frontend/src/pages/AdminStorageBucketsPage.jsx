@@ -2,8 +2,11 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AdminNav from '../components/AdminNav'
 import { getAdminStorageBuckets } from '../services/admin'
+import AdminPagination from '../components/AdminPagination'
 import './AdminDashboardPage.css'
 import './AdminPages.css'
+
+const PAGE_SIZE = 15
 
 function fmtBytes(b) {
   if (!b) return '0 B'
@@ -13,17 +16,22 @@ function fmtBytes(b) {
 
 export default function AdminStorageBucketsPage() {
   const [rows, setRows] = useState([])
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [q, setQ] = useState('')
   const navigate = useNavigate()
 
+  useEffect(() => { setPage(1) }, [q])
   useEffect(() => {
     const t = setTimeout(() => {
       setLoading(true)
-      getAdminStorageBuckets(q).then((r) => setRows(r.data)).catch(() => setRows([])).finally(() => setLoading(false))
+      getAdminStorageBuckets(q, { page, page_size: PAGE_SIZE })
+        .then((r) => { setRows(r.data.items); setTotal(r.data.total) })
+        .catch(() => { setRows([]); setTotal(0) }).finally(() => setLoading(false))
     }, 250)
     return () => clearTimeout(t)
-  }, [q])
+  }, [q, page])
 
   return (
     <div className="adm-page">
@@ -54,13 +62,17 @@ export default function AdminStorageBucketsPage() {
                   <td className="adm-owner-cell">{b.owner_name}</td>
                   <td className="adm-util-cell">{b.object_count}</td>
                   <td className="adm-owner-cell">{fmtBytes(b.total_size_bytes)}</td>
-                  <td><span className="adm-status-pill adm-status-pill--ok">Aktif</span></td>
+                  <td>
+                    <span className={`adm-status-pill adm-status-pill--${b.status === 'active' ? 'ok' : b.status === 'failed' ? 'danger' : 'warn'}`}>
+                      {b.status === 'active' ? 'Aktif' : b.status === 'creating' ? 'Creating' : b.status === 'failed' ? 'Gagal' : b.status}
+                    </span>
+                  </td>
                   <td><button className="adm-link-btn" onClick={() => navigate(`/admin/monitoring/storage/${b.id}`)}>Lihat Detail</button></td>
                 </tr>
               ))}
             </tbody>
           </table>
-          {!loading && <div className="adm-pagi"><span>Menampilkan {rows.length} bucket</span></div>}
+          {!loading && <AdminPagination page={page} pageSize={PAGE_SIZE} total={total} onPage={setPage} label="bucket" />}
         </div>
       </main>
     </div>
