@@ -237,6 +237,30 @@ export default function LanggananPage() {
 
         {error && <div className="langganan-error">{error}</div>}
 
+        {(() => {
+          const subs = [storageSub, hostingSub].filter(Boolean)
+          if (subs.some((s) => s.status === 'suspended')) return (
+            <div className="lan-alert lan-alert--danger">
+              <span className="lan-alert-icon">⚠</span>
+              <span className="lan-alert-text">
+                <strong>Langganan disuspend:</strong> sebagian layanan dibekukan sementara.
+                Hubungi admin untuk mengaktifkannya kembali.
+              </span>
+            </div>
+          )
+          if (subs.some((s) => s.status === 'over_quota')) return (
+            <div className="lan-alert lan-alert--warn">
+              <span className="lan-alert-icon">⚠</span>
+              <span className="lan-alert-text">
+                <strong>Batas kuota tercapai:</strong> pemakaian melebihi batas paket. Fungsi
+                unggah/deploy ditangguhkan sampai pemakaian diturunkan atau paket di-upgrade.
+              </span>
+              <a href="/paket" className="lan-alert-btn">Upgrade paket</a>
+            </div>
+          )
+          return null
+        })()}
+
         {!hasAny ? (
           <div className="langganan-empty">
             <p>Anda belum memiliki langganan aktif.</p>

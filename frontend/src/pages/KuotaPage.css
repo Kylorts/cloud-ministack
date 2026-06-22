@@ -45,6 +45,33 @@
   color: #92400e;
 }
 
+/* Peringatan menonjol (over-quota / suspend) */
+.kuota-alert {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  border-radius: var(--radius-md);
+  font-size: 13.5px;
+  font-family: var(--font-ui);
+}
+.kuota-alert--warn { background: #fcf3dd; border: 1px solid #f3dfa6; color: #7a4f0a; }
+.kuota-alert--danger { background: #fbeaea; border: 1px solid #f2c3c3; color: #a02b22; }
+.kuota-alert-icon { font-size: 20px; flex-shrink: 0; }
+.kuota-alert-text { flex: 1; line-height: 1.5; }
+.kuota-alert-btn {
+  background: #e0922f;
+  color: #fff;
+  border-radius: 8px;
+  padding: 8px 15px;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-decoration: none;
+  flex-shrink: 0;
+}
+.kuota-alert-btn:hover { opacity: 0.9; }
+
 .kuota-banner-icon {
   font-size: 16px;
   flex-shrink: 0;

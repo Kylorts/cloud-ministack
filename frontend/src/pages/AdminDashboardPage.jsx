@@ -4,6 +4,16 @@ import AdminNav from '../components/AdminNav'
 import { getAdminStats, getAdminResources, getAdminAccessKeys } from '../services/admin'
 import './AdminDashboardPage.css'
 
+function fmtUptime(s) {
+  if (!s || s < 0) return '0m'
+  const d = Math.floor(s / 86400)
+  const h = Math.floor((s % 86400) / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  if (d) return `${d}h ${h}j`
+  if (h) return `${h}j ${m}m`
+  return `${m}m`
+}
+
 function formatBytes(bytes) {
   if (!bytes) return '0 B'
   const tb = bytes / (1024 ** 4)
@@ -67,25 +77,28 @@ export default function AdminDashboardPage() {
       <main className="adm-main">
         <div className="adm-header">
           <h1 className="adm-header-title">Dasbor Administrator Utama</h1>
-          <p className="adm-header-sub">Pantau kesehatan node dan aktivitas klien JadeStack.</p>
+          <p className="adm-header-sub">Pantau kesehatan platform dan aktivitas klien JadeStack.</p>
         </div>
 
         {/* Top stats */}
         <div className="adm-stats-grid">
-          {/* Kesehatan node (simulasi) */}
+          {/* Kesehatan platform (nyata: service inti up/down) */}
           <div className="adm-stat-card">
             <div className="adm-stat-head">
               <div>
-                <p className="adm-stat-label">Kesehatan Node Platform</p>
-                <p className="adm-stat-sublabel">Status infrastruktur (simulasi)</p>
+                <p className="adm-stat-label">Kesehatan Platform</p>
+                <p className="adm-stat-sublabel">Status service inti</p>
               </div>
               <span className="adm-stat-icon"><ServerIcon /></span>
             </div>
             <div className="adm-stat-center">
-              <span className="adm-stat-big">{stats ? stats.uptime_percent : '–'}%</span>
-              <span className="adm-stat-unit">Uptime</span>
+              <span className="adm-stat-big">{stats ? `${stats.services_healthy}/${stats.services_total}` : '–'}</span>
+              <span className="adm-stat-unit">service aktif</span>
             </div>
-            <div className="adm-stat-footer-text">● {stats?.physical_nodes_healthy ?? 0} Node Fisik Operasional</div>
+            <div className="adm-stat-footer-text">
+              ● {stats?.system_healthy ? 'Operasional' : 'Terdegradasi'}
+              {stats && <> · uptime {fmtUptime(stats.uptime_seconds)}</>}
+            </div>
           </div>
 
           {/* Klien & langganan */}
@@ -196,7 +209,10 @@ export default function AdminDashboardPage() {
 
       <footer className="adm-footer">
         <span className="adm-footer-copy">© 2026 JADESTACK.</span>
-        <div className="adm-footer-links"><a href="#">Region: ap-southeast-3</a><a href="#">Server Node: Aktif</a></div>
+        <div className="adm-footer-links">
+          <a href="#">Lingkungan: MiniStack (S3 emulator)</a>
+          <a href="#">Status: {stats?.system_healthy ? 'Operasional' : stats ? 'Terdegradasi' : '—'}</a>
+        </div>
       </footer>
     </div>
   )

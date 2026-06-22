@@ -62,6 +62,14 @@ function ShieldIcon() {
     </svg>
   )
 }
+function PackageBoxIcon() {
+  return (
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" fill="#062F28" />
+      <path d="M3.3 7l8.7 5 8.7-5M12 22V12" stroke="#9FE870" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
 function ExternalLinkIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
@@ -156,6 +164,7 @@ function NoSubModal({ serviceName = 'layanan ini', onClose, onGoToPaket }) {
 export default function DashboardPage() {
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const [subscription, setSubscription] = useState(null)
+  const [hostingSub, setHostingSub] = useState(null)
   const [buckets, setBuckets] = useState([])
   const [noSubModal, setNoSubModal] = useState(null) // { serviceName, paketPath } | null
   const [usage, setUsage] = useState(null)
@@ -171,6 +180,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     getMySubscription().then((r) => setSubscription(r.data)).catch(() => {})
+    getMySubscription('hosting').then((r) => setHostingSub(r.data)).catch(() => setHostingSub(null))
     getBuckets().then((r) => setBuckets(r.data)).catch(() => setBuckets([]))
     getStorageUsage().then((r) => setUsage(r.data)).catch(() => setUsage(null))
     getHostingUsage().then((r) => setHostingUsage(r.data)).catch(() => setHostingUsage(null))
@@ -219,6 +229,14 @@ export default function DashboardPage() {
   const activeBuckets = buckets.length
   const bucketLimit = usage?.bucket_limit ?? subscription?.plan?.bucket_limit ?? 0
   const bucketPercent = bucketLimit ? Math.round((activeBuckets / bucketLimit) * 100) : 0
+
+  // Ringkasan paket aktif (storage + hosting) untuk kartu dashboard.
+  const STATUS_LABELS = { active: 'Aktif', over_quota: 'Over Quota', suspended: 'Disuspend', past_due: 'Nunggak' }
+  const planSubs = [subscription, hostingSub].filter(Boolean)
+  const planStatus = planSubs.some((s) => s.status === 'suspended') ? 'suspended'
+    : planSubs.some((s) => s.status === 'over_quota') ? 'over_quota'
+    : planSubs.some((s) => s.status === 'past_due') ? 'past_due'
+    : planSubs.length ? 'active' : null
 
   return (
     <div className="dashboard">
@@ -348,13 +366,18 @@ export default function DashboardPage() {
               </p>
               <Link to="/hosting" className="network-link">Kelola Hosting →</Link>
             </div>
-            <div className="stat-card stat-card--accent">
+            <div className="stat-card stat-card--accent stat-card--clickable"
+              onClick={() => navigate('/langganan')} role="button" tabIndex={0}>
               <div className="security-content">
                 <div>
-                  <p className="security-label">Status Keamanan</p>
-                  <p className="security-value">Sangat Aman</p>
+                  <p className="security-label">Paket Aktif</p>
+                  <p className="security-value">{subscription?.plan?.name ?? 'Belum aktif'}</p>
+                  <p className="security-sub">
+                    Hosting: {hostingSub?.plan?.name ?? 'belum aktif'}
+                    {planStatus && planStatus !== 'active' && <> · {STATUS_LABELS[planStatus]}</>}
+                  </p>
                 </div>
-                <ShieldIcon />
+                <PackageBoxIcon />
               </div>
             </div>
           </div>
