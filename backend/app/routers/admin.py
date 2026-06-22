@@ -376,6 +376,36 @@ def admin_fast_forward(sub_id: int, db: Session = Depends(get_db), admin: User =
     }
 
 
+@router.post("/subscriptions/{sub_id}/mark-past-due", status_code=200)
+def admin_mark_past_due(sub_id: int, db: Session = Depends(get_db), admin: User = Depends(get_admin_user)):
+    """DEMO: tandai langganan NUNGGAK (past_due). Selama nunggak, langganan terkunci
+    dari perubahan paket; dan begitu KLIEN membuka langganannya, otomatis TURUN ke Free
+    (lihat apply_past_due_fallback). Di dunia nyata past_due datang dari tagihan tak
+    terbayar (Midtrans, di-descope); di sini di-set manual untuk peragaan.
+    """
+    s = db.get(Subscription, sub_id)
+    if not s:
+        raise HTTPException(status_code=404, detail="Langganan tidak ditemukan")
+    if s.status in (SubscriptionStatus.cancelled, SubscriptionStatus.expired, SubscriptionStatus.terminated):
+        raise HTTPException(status_code=400, detail="Langganan sudah berakhir.")
+    if s.status == SubscriptionStatus.suspended:
+        raise HTTPException(status_code=400, detail="Langganan sedang disuspend; unsuspend dulu.")
+    if s.status == SubscriptionStatus.past_due:
+        raise HTTPException(status_code=400, detail="Langganan sudah nunggak.")
+    if float(s.plan.price) == 0:
+        raise HTTPException(status_code=400, detail="Paket Free tidak bisa nunggak (tak ada tagihan).")
+    s.status = SubscriptionStatus.past_due
+    s.current_period_end = datetime.utcnow() - timedelta(days=1)
+    log_activity(
+        db, actor_user_id=admin.id, actor_type=ActorType.admin,
+        action="SUBSCRIPTION_MARKED_PAST_DUE",
+        description="Admin menandai langganan nunggak (past_due) — simulasi.",
+        target_type="SUBSCRIPTION", target_id=s.id,
+    )
+    db.commit()
+    return {"message": "Langganan ditandai nunggak (past_due). Akan otomatis turun ke Free saat klien membukanya."}
+
+
 @router.post("/subscriptions/{sub_id}/suspend", status_code=200)
 def admin_suspend_subscription(sub_id: int, db: Session = Depends(get_db), admin: User = Depends(get_admin_user)):
     """Suspend langganan klien secara manual (override admin)."""

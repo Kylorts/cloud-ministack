@@ -9,6 +9,7 @@ from app.core.pin import require_pin
 from app.core import usage as usage_helper
 from app.database import get_db
 from app.models.access_key import AccessKey, KeyStatus
+from app.models.activity_log import ActorType
 from app.models.plan import PlanCategory, ServicePlan
 from app.models.subscription import (
     ACTIVE_LIKE_STATUSES,
@@ -90,6 +91,51 @@ def _apply_scheduled(db: Session, sub: Subscription) -> bool:
     return True
 
 
+def apply_past_due_fallback(db: Session, sub: Subscription) -> bool:
+    """Nunggak (`past_due`) → otomatis TURUN ke tier Free begitu klien mengakses
+    langganannya (seketika di sisi klien). Akses key dipertahankan. Mirror logika
+    cancel→Free, tetapi dipicu sistem (bukan klien). Return True bila diterapkan."""
+    if not sub or sub.status != SubscriptionStatus.past_due:
+        return False
+    free_plan = (
+        db.query(ServicePlan)
+        .filter(
+            ServicePlan.category == PlanCategory(sub.category),
+            ServicePlan.price == 0,
+            ServicePlan.is_active.is_(True),
+        )
+        .order_by(ServicePlan.id.asc())
+        .first()
+    )
+    if not free_plan:
+        return False
+    old_name = sub.plan.name
+    now = datetime.utcnow()
+    sub.plan = free_plan
+    sub.scheduled_plan_id = None
+    sub.status = SubscriptionStatus.active
+    sub.suspended_at = None
+    sub.over_quota_since = None
+    sub.grace_until = None
+    sub.cancelled_at = None
+    sub.current_period_start = now
+    sub.current_period_end = now + timedelta(days=30)
+    if sub.category == "hosting":
+        usage_helper.recalculate_hosting(db, sub)
+    else:
+        usage_helper.recalculate(db, sub)
+    usage_helper.evaluate_quota_status(db, sub)
+    log_activity(
+        db, actor_user_id=sub.user_id, actor_type=ActorType.system,
+        action="SUBSCRIPTION_PAST_DUE_FALLBACK",
+        description=f"Langganan nunggak ({old_name}) otomatis turun ke {free_plan.name}.",
+        target_type="SUBSCRIPTION", target_id=sub.id,
+    )
+    db.commit()
+    db.refresh(sub)
+    return True
+
+
 @router.get("/me", response_model=SubscriptionResponse)
 def get_my_subscription(
     category: str = Query("storage"),
@@ -102,6 +148,7 @@ def get_my_subscription(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Anda belum memiliki langganan aktif",
         )
+    apply_past_due_fallback(db, sub)  # nunggak → otomatis turun ke Free begitu klien mengakses
     _apply_scheduled(db, sub)  # terapkan downgrade terjadwal bila sudah waktunya
     from app.core.usage import apply_grace_suspend
 
@@ -141,6 +188,26 @@ def subscribe(
     active = _get_active_subscription(current_user.id, db, category=category)
 
     if active:
+        label = "Hosting" if category == "hosting" else "Storage"
+        # Langganan NUNGGAK (past_due) dikunci dari perubahan paket: paket saat ini saja
+        # belum lunas. Jalan keluar: batalkan → turun ke Free, atau dipulihkan admin.
+        if active.status == SubscriptionStatus.past_due:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(f"Langganan {label} Anda belum lunas (nunggak). Selesaikan tunggakan "
+                        f"terlebih dahulu sebelum mengubah paket, atau batalkan langganan untuk "
+                        f"turun ke paket Free."),
+            )
+        # Langganan DISUSPEND dikunci penuh — tak bisa upgrade/ganti/batal sendiri.
+        # Hanya admin yang dapat mengaktifkan kembali (unsuspend).
+        if active.status == SubscriptionStatus.suspended:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(f"Langganan {label} Anda sedang disuspend. Hubungi admin untuk "
+                        f"mengaktifkannya kembali — Anda tidak dapat mengubah paket maupun "
+                        f"membatalkannya sendiri."),
+            )
+
         is_upgrade = float(plan.price) > float(active.plan.price)
 
         # ── UPGRADE IN-PLACE (langsung) ───────────────────────────────
@@ -228,13 +295,20 @@ def cancel_subscription(
     x_transaction_pin: str | None = Header(default=None, alias="X-Transaction-PIN"),
 ):
     require_pin(current_user, x_transaction_pin)
-    # _get_active_subscription sudah memfilter status active-like (termasuk
-    # over_quota / suspended) — semua boleh dibatalkan, bukan hanya `active`.
+    # _get_active_subscription memfilter status active-like (termasuk over_quota /
+    # past_due / suspended). past_due & over_quota boleh dibatalkan (turun ke Free),
+    # tetapi suspended TIDAK — hanya admin yang dapat membuka (unsuspend).
     sub = _get_active_subscription(current_user.id, db, category=category)
     if not sub:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Tidak ada langganan aktif untuk dibatalkan",
+        )
+    if sub.status == SubscriptionStatus.suspended:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=("Langganan Anda sedang disuspend dan tidak dapat dibatalkan sendiri. "
+                    "Hubungi admin untuk mengaktifkannya kembali."),
         )
 
     # Tier Free = lantai langganan. "Batalkan" paket berbayar = TURUN ke Free
@@ -301,6 +375,16 @@ def schedule_downgrade(
     sub = _get_active_subscription(current_user.id, db, category=category)
     if not sub:
         raise HTTPException(status_code=404, detail="Tidak ada langganan aktif untuk dijadwalkan.")
+    if sub.status == SubscriptionStatus.past_due:
+        raise HTTPException(
+            status_code=409,
+            detail="Langganan Anda belum lunas (nunggak). Tidak bisa menjadwalkan perubahan paket.",
+        )
+    if sub.status == SubscriptionStatus.suspended:
+        raise HTTPException(
+            status_code=409,
+            detail="Langganan Anda sedang disuspend. Hubungi admin untuk mengaktifkannya kembali.",
+        )
     if plan.id == sub.plan_id:
         raise HTTPException(status_code=400, detail="Paket tujuan sama dengan paket saat ini.")
     if float(plan.price) >= float(sub.plan.price):

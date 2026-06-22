@@ -24,11 +24,16 @@ function formatPrice(price) {
   return 'Rp ' + new Intl.NumberFormat('id-ID').format(price)
 }
 
-const CANCELLABLE = ['active', 'over_quota', 'suspended']
+// past_due (nunggak) ikut dapat tombol batal — itu jalan keluar mandiri (turun ke Free).
+// suspended TIDAK bisa dibatalkan sendiri — hanya admin yang dapat unsuspend.
+const CANCELLABLE = ['active', 'over_quota', 'past_due']
 
 function StatusBadge({ status }) {
   const label = status === 'active' ? 'AKTIF'
     : status === 'cancelled' ? 'DIBATALKAN'
+    : status === 'past_due' ? 'NUNGGAK'
+    : status === 'over_quota' ? 'OVER QUOTA'
+    : status === 'suspended' ? 'DISUSPEND'
     : status.toUpperCase()
   return <span className={`lan-status-badge lan-status--${status}`}>{label}</span>
 }
@@ -85,6 +90,12 @@ function SubBlock({ category, sub, storageUsage, hostingUsage, navigate, onCance
           <button className="lan-cancel-btn" onClick={() => onCancel(category, sub)} disabled={cancelling}>
             ⊘ Turun ke Paket Free
           </button>
+        )}
+        {sub.status === 'suspended' && (
+          <div className="lan-scheduled">
+            ⚠ Langganan disuspend. Anda tidak bisa mengubah atau membatalkannya sendiri —
+            hubungi admin untuk mengaktifkannya kembali.
+          </div>
         )}
       </div>
 

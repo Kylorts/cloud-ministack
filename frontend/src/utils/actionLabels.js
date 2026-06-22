@@ -18,6 +18,8 @@ export const ACTION_LABELS = {
   DOWNGRADE_SCHEDULED: 'Jadwalkan Downgrade',
   DOWNGRADE_SCHEDULE_CANCELLED: 'Batalkan Jadwal Downgrade',
   SUBSCRIPTION_CANCELLED: 'Batalkan Langganan',
+  SUBSCRIPTION_MARKED_PAST_DUE: 'Tandai Nunggak',
+  SUBSCRIPTION_PAST_DUE_FALLBACK: 'Nunggak Turun ke Free',
   SUBSCRIPTION_SUSPENDED: 'Langganan Disuspend',
   SUBSCRIPTION_UNSUSPENDED: 'Langganan Dipulihkan',
   SUBSCRIPTION_REPAIRED: 'Perbaiki Langganan',

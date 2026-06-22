@@ -90,6 +90,10 @@ export default function PaketPage() {
   const hasActivePlan = subscription && ACTIVE_LIKE.includes(subscription.status)
   const currentPlanId = hasActivePlan ? subscription.plan_id : null
   const currentPlanPrice = hasActivePlan ? (subscription.plan?.price ?? null) : null
+  // Langganan NUNGGAK (past_due) atau DISUSPEND dikunci dari perubahan paket.
+  const isPastDue = hasActivePlan && subscription.status === 'past_due'
+  const isSuspended = hasActivePlan && subscription.status === 'suspended'
+  const isLocked = isPastDue || isSuspended
 
   function getPlanAction(plan) {
     if (!currentPlanId) return { label: 'Pilih Paket', type: 'subscribe' }
@@ -152,6 +156,18 @@ export default function PaketPage() {
             <button className="paket-scheduled-cancel" onClick={handleCancelScheduled}>Batalkan</button>
           </div>
         )}
+        {isPastDue && (
+          <div className="paket-error">
+            ⚠ Langganan Anda <strong>belum lunas (nunggak)</strong>. Anda tidak bisa upgrade atau mengganti paket
+            sampai tunggakan diselesaikan. Untuk berhenti, batalkan langganan (turun ke paket Free) di menu Langganan.
+          </div>
+        )}
+        {isSuspended && (
+          <div className="paket-error">
+            ⚠ Langganan Anda <strong>sedang disuspend</strong>. Anda tidak bisa upgrade, mengganti, maupun
+            membatalkan paket sendiri. Hubungi admin untuk mengaktifkannya kembali.
+          </div>
+        )}
 
         {loading ? (
           <div className="paket-loading-inline">Memuat paket...</div>
@@ -161,7 +177,8 @@ export default function PaketPage() {
               const action = getPlanAction(plan)
               const isCurrent = action.type === 'current'
               const isScheduled = subscription?.scheduled_plan_id === plan.id
-              const disabled = isCurrent || isScheduled || subscribing === plan.id
+              const lockedChange = isLocked && !isCurrent
+              const disabled = isCurrent || isScheduled || subscribing === plan.id || lockedChange
               return (
                 <div key={plan.id} className={`plan-card ${isCurrent ? 'plan-card--active' : ''}`}>
                   {isCurrent && <div className="plan-ribbon">AKTIF</div>}
@@ -184,6 +201,7 @@ export default function PaketPage() {
                   >
                     {subscribing === plan.id ? 'Memproses...'
                       : isScheduled ? 'Terjadwal'
+                      : lockedChange ? (isSuspended ? 'Terkunci (disuspend)' : 'Terkunci (nunggak)')
                       : action.label}
                   </button>
                 </div>
