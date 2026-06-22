@@ -1,4 +1,5 @@
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { useEffect } from 'react'
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { isAuthenticated, getStoredUser } from './services/auth'
 import LandingPage from './pages/LandingPage'
 import LoginPage from './pages/LoginPage'
@@ -31,6 +32,48 @@ import SiteDetailPage from './pages/SiteDetailPage'
 import AccessKeysPage from './pages/AccessKeysPage'
 import KeamananPage from './pages/KeamananPage'
 
+// Judul tab per halaman (tanpa simbol). Path tak dikenal → "JadeStack".
+const PAGE_TITLES = [
+  [/^\/login$/, 'Masuk'],
+  [/^\/register$/, 'Daftar'],
+  [/^\/lupa-sandi$/, 'Lupa Kata Sandi'],
+  [/^\/reset-sandi$/, 'Atur Ulang Kata Sandi'],
+  [/^\/dashboard$/, 'Dashboard'],
+  [/^\/paket$/, 'Paket Langganan'],
+  [/^\/langganan$/, 'Langganan'],
+  [/^\/storage$/, 'Penyimpanan'],
+  [/^\/storage\/buckets\/[^/]+$/, 'Detail Bucket'],
+  [/^\/kuota$/, 'Kuota'],
+  [/^\/aktivitas$/, 'Aktivitas'],
+  [/^\/hosting$/, 'Hosting'],
+  [/^\/hosting\/sites\/[^/]+$/, 'Detail Situs'],
+  [/^\/access-keys$/, 'Access Key'],
+  [/^\/keamanan$/, 'Keamanan'],
+  [/^\/admin$/, 'Dashboard Admin'],
+  [/^\/admin\/pengguna$/, 'Manajemen Pengguna'],
+  [/^\/admin\/pengguna\/[^/]+$/, 'Detail Pengguna'],
+  [/^\/admin\/langganan$/, 'Langganan'],
+  [/^\/admin\/langganan\/[^/]+$/, 'Detail Langganan'],
+  [/^\/admin\/transaksi$/, 'Riwayat Langganan'],
+  [/^\/admin\/monitoring$/, 'Monitoring Sumber Daya'],
+  [/^\/admin\/monitoring\/storage$/, 'Bucket'],
+  [/^\/admin\/monitoring\/storage\/[^/]+$/, 'Detail Bucket'],
+  [/^\/admin\/monitoring\/hosting$/, 'Situs Hosting'],
+  [/^\/admin\/logs$/, 'Log Sistem'],
+  [/^\/admin\/audit$/, 'Audit Admin'],
+  [/^\/admin\/keys$/, 'Access Key Global'],
+  [/^\/admin\/iam$/, 'Policy IAM'],
+]
+
+function TitleManager() {
+  const { pathname } = useLocation()
+  useEffect(() => {
+    const match = PAGE_TITLES.find(([re]) => re.test(pathname))
+    document.title = match ? match[1] : 'JadeStack'
+  }, [pathname])
+  return null
+}
+
 function PrivateRoute({ children }) {
   return isAuthenticated() ? children : <Navigate to="/login" replace />
 }
@@ -58,7 +101,9 @@ function RootRoute() {
 
 export default function App() {
   return (
-    <Routes>
+    <>
+      <TitleManager />
+      <Routes>
       <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
       <Route path="/register" element={<PublicRoute><RegisterPage /></PublicRoute>} />
       <Route path="/lupa-sandi" element={<LupaSandiPage />} />
@@ -155,6 +200,7 @@ export default function App() {
 
       {/* Catch-all: rute tak dikenal → arahkan ke beranda (login/dashboard), bukan halaman putih */}
       <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+      </Routes>
+    </>
   )
 }

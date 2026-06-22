@@ -12,9 +12,11 @@ class Page(BaseModel, Generic[T]):
 
 
 class StatsResponse(BaseModel):
-    # Simulasi (tidak ada node fisik nyata)
-    uptime_percent: float
-    physical_nodes_healthy: int
+    # Status platform NYATA (uptime proses + jumlah service inti yang hidup)
+    uptime_seconds: int
+    services_healthy: int
+    services_total: int
+    system_healthy: bool
     # Real
     active_clients: int
     active_subscriptions: int
@@ -47,13 +49,20 @@ class AdminAccessKeyItem(BaseModel):
 
 
 # ── Fase B: Pengguna ──
+class AdminUserPackage(BaseModel):
+    category: str          # "storage" | "hosting"
+    plan_name: str
+    status: str            # status langganan: active | over_quota | suspended | past_due | ...
+
+
 class AdminUserItem(BaseModel):
     id: int
     name: str
     email: str
     role: str
-    status: str
-    plan_name: str | None
+    status: str            # status AKUN (active/suspended/deleted)
+    plan_name: str | None  # paket utama (kompat lama)
+    packages: list[AdminUserPackage] = []  # semua paket aktif + status langganannya
     created_at: datetime
 
 
@@ -202,6 +211,11 @@ class AdminTopUser(BaseModel):
     used_bytes: int
 
 
+class ServiceStatus(BaseModel):
+    name: str
+    healthy: bool
+
+
 class AdminMonitoring(BaseModel):
     storage_used_bytes: int
     storage_cap_bytes: int
@@ -214,6 +228,8 @@ class AdminMonitoring(BaseModel):
     capacity_percent: int
     avg_load_percent: int
     healthy: bool
+    uptime_seconds: int = 0
+    services: list[ServiceStatus] = []
 
 
 class AdminBucketRow(BaseModel):

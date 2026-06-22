@@ -24,11 +24,16 @@ function formatPrice(price) {
   return 'Rp ' + new Intl.NumberFormat('id-ID').format(price)
 }
 
-const CANCELLABLE = ['active', 'over_quota', 'suspended']
+// past_due (nunggak) ikut dapat tombol batal — itu jalan keluar mandiri (turun ke Free).
+// suspended TIDAK bisa dibatalkan sendiri — hanya admin yang dapat unsuspend.
+const CANCELLABLE = ['active', 'over_quota', 'past_due']
 
 function StatusBadge({ status }) {
   const label = status === 'active' ? 'AKTIF'
     : status === 'cancelled' ? 'DIBATALKAN'
+    : status === 'past_due' ? 'NUNGGAK'
+    : status === 'over_quota' ? 'OVER QUOTA'
+    : status === 'suspended' ? 'DISUSPEND'
     : status.toUpperCase()
   return <span className={`lan-status-badge lan-status--${status}`}>{label}</span>
 }
@@ -85,6 +90,12 @@ function SubBlock({ category, sub, storageUsage, hostingUsage, navigate, onCance
           <button className="lan-cancel-btn" onClick={() => onCancel(category, sub)} disabled={cancelling}>
             ⊘ Turun ke Paket Free
           </button>
+        )}
+        {sub.status === 'suspended' && (
+          <div className="lan-scheduled">
+            ⚠ Langganan disuspend. Anda tidak bisa mengubah atau membatalkannya sendiri —
+            hubungi admin untuk mengaktifkannya kembali.
+          </div>
         )}
       </div>
 
@@ -225,6 +236,30 @@ export default function LanggananPage() {
         </div>
 
         {error && <div className="langganan-error">{error}</div>}
+
+        {(() => {
+          const subs = [storageSub, hostingSub].filter(Boolean)
+          if (subs.some((s) => s.status === 'suspended')) return (
+            <div className="lan-alert lan-alert--danger">
+              <span className="lan-alert-icon">⚠</span>
+              <span className="lan-alert-text">
+                <strong>Langganan disuspend:</strong> sebagian layanan dibekukan sementara.
+                Hubungi admin untuk mengaktifkannya kembali.
+              </span>
+            </div>
+          )
+          if (subs.some((s) => s.status === 'over_quota')) return (
+            <div className="lan-alert lan-alert--warn">
+              <span className="lan-alert-icon">⚠</span>
+              <span className="lan-alert-text">
+                <strong>Batas kuota tercapai:</strong> pemakaian melebihi batas paket. Fungsi
+                unggah/deploy ditangguhkan sampai pemakaian diturunkan atau paket di-upgrade.
+              </span>
+              <a href="/paket" className="lan-alert-btn">Upgrade paket</a>
+            </div>
+          )
+          return null
+        })()}
 
         {!hasAny ? (
           <div className="langganan-empty">

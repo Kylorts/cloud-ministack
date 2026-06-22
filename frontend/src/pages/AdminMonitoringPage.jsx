@@ -33,9 +33,9 @@ export default function AdminMonitoringPage() {
       ['Total Bandwidth', fmtBytes(m.bandwidth_used_bytes)],
       ['Total Bucket', String(m.bucket_count)],
       ['Total Situs', String(m.site_count)],
-      ['Nodes Active', `${m.nodes_active}/${m.nodes_total}`],
+      ['Service Aktif', `${m.nodes_active}/${m.nodes_total}`],
       ['Kapasitas Server', `${m.capacity_percent}%`],
-      ['Avg Load', `${m.avg_load_percent}%`],
+      ['Beban (load)', `${m.avg_load_percent}%`],
       ['', ''],
       ['Top Storage Users', 'Pemakaian'],
       ...m.top_storage_users.map((u) => [u.name, fmtBytes(u.used_bytes)]),
@@ -107,14 +107,22 @@ export default function AdminMonitoringPage() {
 
               <div className="adm-table-card">
                 <div className="adm-table-header">
-                  <h2 className="adm-table-title">Status Node Internal</h2>
-                  <span className={`adm-status-pill adm-status-pill--${m.healthy ? 'ok' : 'danger'}`}>{m.healthy ? '● Healthy' : 'Degraded'}</span>
+                  <h2 className="adm-table-title">Status Service Inti</h2>
+                  <span className={`adm-status-pill adm-status-pill--${m.healthy ? 'ok' : 'danger'}`}>{m.healthy ? '● Operasional' : 'Terdegradasi'}</span>
                 </div>
-                <div className="adm-bar-row-label"><span>Kapasitas Server Keseluruhan</span><span>{m.capacity_percent}%</span></div>
+                {(m.services ?? []).map((s) => (
+                  <div key={s.name} className="adm-bar-row-label" style={{ marginBottom: 8 }}>
+                    <span>{s.name}</span>
+                    <span style={{ color: s.healthy ? '#16a34a' : '#dc2626', fontWeight: 500 }}>
+                      ● {s.healthy ? 'Aktif' : 'Mati'}
+                    </span>
+                  </div>
+                ))}
+                <div className="adm-bar-row-label" style={{ marginTop: 14 }}><span>Kapasitas Server Keseluruhan</span><span>{m.capacity_percent}%</span></div>
                 <div className="adm-bar"><div className="adm-bar-fill" style={{ width: `${Math.min(m.capacity_percent, 100)}%`, background: 'var(--color-accent)' }} /></div>
                 <div className="adm-mini-grid" style={{ gridTemplateColumns: '1fr 1fr', marginTop: 18 }}>
-                  <div><div className="adm-mini-label">Nodes Active <span style={{ color: '#9ca3af' }}>(simulasi)</span></div><div className="adm-mini-value">{m.nodes_active} / {m.nodes_total}</div></div>
-                  <div><div className="adm-mini-label">Avg Load <span style={{ color: '#9ca3af' }}>(simulasi)</span></div><div className="adm-mini-value">{m.avg_load_percent}%</div></div>
+                  <div><div className="adm-mini-label">Service aktif</div><div className="adm-mini-value">{m.nodes_active} / {m.nodes_total}</div></div>
+                  <div><div className="adm-mini-label">Beban (load)</div><div className="adm-mini-value">{m.avg_load_percent}%</div></div>
                 </div>
               </div>
             </div>

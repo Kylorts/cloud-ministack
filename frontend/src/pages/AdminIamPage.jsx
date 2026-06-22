@@ -94,8 +94,6 @@ export default function AdminIamPage() {
           <button className="adm-btn-primary" onClick={() => setEdit({})}>+ Buat Policy Baru</button>
         </div>
 
-        <div className="adm-sim-banner">🔒 Policy <b>di-enforce</b> untuk akses lewat <b>access key</b> — storage via <code>/s3</code> &amp; hosting via <code>/hosting-api</code> (Allow/Deny, explicit Deny menang). Catatan: akses via web UI (pemilik akun) tidak diatur policy.</div>
-
         <div className="adm-table-card">
           <table className="adm-table">
             <thead><tr><th>Nama Policy</th><th>Deskripsi</th><th>Tipe</th><th>Dibuat Oleh</th><th>Aksi</th></tr></thead>

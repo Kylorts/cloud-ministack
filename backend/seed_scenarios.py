@@ -7,8 +7,9 @@ Reset (hapus 3 akun skenario lalu buat ulang):
     docker compose exec backend python seed_scenarios.py --reset
 
 Skenario (password semua: demo123):
-  1. demo-nunggak@iniawan.id  — Klien NUNGGAK: langganan status `past_due`,
-     periode sudah lewat 5 hari (belum "bayar" perpanjangan).
+  1. demo-nunggak@iniawan.id  — Klien NUNGGAK: langganan status `past_due`.
+     Admin melihatnya terkunci; begitu klien ini login & membuka Langganan,
+     OTOMATIS turun ke paket Free (apply_past_due_fallback).
   2. demo-suspend@iniawan.id  — Klien DISUSPEND karena nunggak lewat batas:
      langganan status `suspended` (grace habis 7 hari lalu, suspended kemarin).
   3. demo-banned@iniawan.id   — Akun DISUSPEND ADMIN: user.status = suspended

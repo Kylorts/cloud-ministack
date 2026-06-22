@@ -1,10 +1,14 @@
 import json
+import os
+import time
+import urllib.request
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func
+from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.core import usage as usage_helper
 from app.core.activity import log_activity
 from app.core.deps import get_admin_user, get_db
@@ -24,14 +28,57 @@ from app.schemas.admin import (
     AdminAccessKeyItem, AdminActivityItem, AdminAuditItem, AdminBucketDetail, AdminBucketObject,
     AdminBucketRow, AdminLogItem, AdminLogPage, AdminMonitoring, AdminPlanChange, AdminPlanItem,
     AdminPlanWrite, AdminResourceItem, AdminSiteRow, AdminSubscriptionDetail, AdminSubscriptionItem,
-    AdminSubHistoryItem, AdminTopUser, AdminTransactionDetail, AdminTransactionItem, AdminUserDetail, AdminUserItem,
-    AdminUserResource, ChangePlanRequest, IamPolicyItem, IamPolicyWrite, Page, StatsResponse,
+    AdminSubHistoryItem, AdminTopUser, AdminTransactionDetail, AdminTransactionItem, AdminUserDetail, AdminUserItem, AdminUserPackage,
+    AdminUserResource, ChangePlanRequest, IamPolicyItem, IamPolicyWrite, Page, ServiceStatus, StatsResponse,
     StatusUpdateRequest,
 )
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 PLATFORM_STORAGE_CAP = 1024 ** 4  # 1 TB (simulasi kapasitas platform)
+
+# Waktu proses backend mulai → untuk uptime nyata.
+_BOOT_MONO = time.monotonic()
+
+
+def _check_db(db: Session) -> bool:
+    try:
+        db.execute(text("SELECT 1"))
+        return True
+    except Exception:
+        return False
+
+
+def _check_ministack() -> bool:
+    try:
+        urllib.request.urlopen(settings.MINISTACK_ENDPOINT + "/_ministack/health", timeout=2)
+        return True
+    except Exception:
+        return False
+
+
+def _platform_health(db: Session) -> dict:
+    """Status NYATA service inti (tanpa Mailpit) + uptime & load proses backend."""
+    services = [
+        ("Backend API", True),                 # endpoint ini merespons → backend up
+        ("Database (MySQL)", _check_db(db)),
+        ("MiniStack (S3)", _check_ministack()),
+    ]
+    active = sum(1 for _, up in services if up)
+    try:
+        load1 = os.getloadavg()[0]
+        cores = os.cpu_count() or 1
+        load_pct = min(round(load1 / cores * 100), 100)
+    except (OSError, AttributeError):
+        load_pct = 0
+    return {
+        "services": services,
+        "active": active,
+        "total": len(services),
+        "healthy": active == len(services),
+        "uptime_seconds": int(time.monotonic() - _BOOT_MONO),
+        "load_percent": load_pct,
+    }
 
 
 def _owner_storage_limit(db: Session, user_id: int) -> int:
@@ -46,6 +93,20 @@ def _owner_storage_limit(db: Session, user_id: int) -> int:
         .first()
     )
     return sub.plan.storage_limit_bytes if sub else 0
+
+
+def _owner_hosting_limit(db: Session, user_id: int) -> int:
+    sub = (
+        db.query(Subscription)
+        .filter(
+            Subscription.user_id == user_id,
+            Subscription.category == "hosting",
+            Subscription.status.in_(ACTIVE_LIKE_STATUSES),
+        )
+        .order_by(Subscription.created_at.desc())
+        .first()
+    )
+    return sub.plan.storage_limit_bytes if sub else 0  # limit = total build hosting
 
 
 @router.get("/stats", response_model=StatsResponse)
@@ -74,9 +135,12 @@ def get_stats(db: Session = Depends(get_db), _: User = Depends(get_admin_user)):
         .scalar()
     )
 
+    health = _platform_health(db)
     return StatsResponse(
-        uptime_percent=99.9,
-        physical_nodes_healthy=4,
+        uptime_seconds=health["uptime_seconds"],
+        services_healthy=health["active"],
+        services_total=health["total"],
+        system_healthy=health["healthy"],
         active_clients=active_clients,
         active_subscriptions=active_subscriptions,
         new_clients_this_month=new_clients,
@@ -121,9 +185,19 @@ def list_resources(db: Session = Depends(get_db), _: User = Depends(get_admin_us
     )
     for s in sites:
         owner = db.get(User, s.user_id)
+        # Ukuran build situs = total_size_bytes deployment aktif.
+        build = 0
+        if s.active_deployment_id:
+            build = int(
+                db.query(func.coalesce(func.sum(StaticSiteDeployment.total_size_bytes), 0))
+                .filter(StaticSiteDeployment.id == s.active_deployment_id)
+                .scalar()
+            )
+        limit_h = _owner_hosting_limit(db, s.user_id)
+        util = round(build / limit_h * 100) if limit_h else 0
         items.append(AdminResourceItem(
             id=s.id, name=s.site_name, owner_name=owner.name if owner else "-",
-            type="Static", utilization_percent=0, status="active",
+            type="Static", utilization_percent=min(util, 100), status="active",
         ))
 
     return items
@@ -197,11 +271,18 @@ def list_users(q: str = Query(""), page: int = Query(1), page_size: int = Query(
     users = base.offset(max(page - 1, 0) * page_size).limit(page_size).all()
     out = []
     for u in users:
-        sub = _active_sub(db, u.id, "storage") or _active_sub(db, u.id, "hosting")
+        storage = _active_sub(db, u.id, "storage")
+        hosting = _active_sub(db, u.id, "hosting")
+        packages = [
+            AdminUserPackage(category=cat, plan_name=s.plan.name, status=s.status.value)
+            for s, cat in ((storage, "storage"), (hosting, "hosting")) if s
+        ]
+        primary = storage or hosting
         out.append(AdminUserItem(
             id=u.id, name=u.name, email=u.email,
             role=u.role.value, status=u.status.value,
-            plan_name=sub.plan.name if sub else None, created_at=u.created_at,
+            plan_name=primary.plan.name if primary else None,
+            packages=packages, created_at=u.created_at,
         ))
     return Page[AdminUserItem](items=out, total=total)
 
@@ -376,6 +457,36 @@ def admin_fast_forward(sub_id: int, db: Session = Depends(get_db), admin: User =
     }
 
 
+@router.post("/subscriptions/{sub_id}/mark-past-due", status_code=200)
+def admin_mark_past_due(sub_id: int, db: Session = Depends(get_db), admin: User = Depends(get_admin_user)):
+    """DEMO: tandai langganan NUNGGAK (past_due). Selama nunggak, langganan terkunci
+    dari perubahan paket; dan begitu KLIEN membuka langganannya, otomatis TURUN ke Free
+    (lihat apply_past_due_fallback). Di dunia nyata past_due datang dari tagihan tak
+    terbayar (Midtrans, di-descope); di sini di-set manual untuk peragaan.
+    """
+    s = db.get(Subscription, sub_id)
+    if not s:
+        raise HTTPException(status_code=404, detail="Langganan tidak ditemukan")
+    if s.status in (SubscriptionStatus.cancelled, SubscriptionStatus.expired, SubscriptionStatus.terminated):
+        raise HTTPException(status_code=400, detail="Langganan sudah berakhir.")
+    if s.status == SubscriptionStatus.suspended:
+        raise HTTPException(status_code=400, detail="Langganan sedang disuspend; unsuspend dulu.")
+    if s.status == SubscriptionStatus.past_due:
+        raise HTTPException(status_code=400, detail="Langganan sudah nunggak.")
+    if float(s.plan.price) == 0:
+        raise HTTPException(status_code=400, detail="Paket Free tidak bisa nunggak (tak ada tagihan).")
+    s.status = SubscriptionStatus.past_due
+    s.current_period_end = datetime.utcnow() - timedelta(days=1)
+    log_activity(
+        db, actor_user_id=admin.id, actor_type=ActorType.admin,
+        action="SUBSCRIPTION_MARKED_PAST_DUE",
+        description="Admin menandai langganan nunggak (past_due) — simulasi.",
+        target_type="SUBSCRIPTION", target_id=s.id,
+    )
+    db.commit()
+    return {"message": "Langganan ditandai nunggak (past_due). Akan otomatis turun ke Free saat klien membukanya."}
+
+
 @router.post("/subscriptions/{sub_id}/suspend", status_code=200)
 def admin_suspend_subscription(sub_id: int, db: Session = Depends(get_db), admin: User = Depends(get_admin_user)):
     """Suspend langganan klien secara manual (override admin)."""
@@ -534,6 +645,7 @@ def monitoring(db: Session = Depends(get_db), _: User = Depends(get_admin_user))
         top.append(AdminTopUser(name=owner.name if owner else "-", used_bytes=int(used)))
 
     capacity_percent = round(object_bytes / PLATFORM_STORAGE_CAP * 100) if PLATFORM_STORAGE_CAP else 0
+    health = _platform_health(db)
 
     return AdminMonitoring(
         storage_used_bytes=object_bytes,
@@ -542,10 +654,12 @@ def monitoring(db: Session = Depends(get_db), _: User = Depends(get_admin_user))
         bucket_count=bucket_count,
         site_count=site_count,
         top_storage_users=top,
-        nodes_active=4, nodes_total=4,         # simulasi
+        nodes_active=health["active"], nodes_total=health["total"],
         capacity_percent=min(capacity_percent, 100),
-        avg_load_percent=42,                   # simulasi
-        healthy=True,
+        avg_load_percent=health["load_percent"],
+        healthy=health["healthy"],
+        uptime_seconds=health["uptime_seconds"],
+        services=[ServiceStatus(name=n, healthy=up) for n, up in health["services"]],
     )
 
 

@@ -253,7 +253,7 @@ export default function AccessKeysPage() {
                     </td>
                     <td className="ak-meta">
                       {k.policy_name
-                        ? <span className="ak-badge ak-badge--policy">🛡 {k.policy_name}</span>
+                        ? <span className="ak-badge ak-badge--policy">{k.policy_name}</span>
                         : (k.permission === 'read_only' ? 'Read-Only' : 'Full Access')}
                     </td>
                     <td className="ak-meta">{formatDateTime(k.created_at)}</td>

@@ -132,12 +132,33 @@ export default function KuotaPage() {
       ]} />
 
       <main className="kuota-main">
-        {/* Info banner */}
+        {/* Peringatan over-quota / suspend (menonjol) */}
+        {subscription?.status === 'over_quota' && (
+          <div className="kuota-alert kuota-alert--warn">
+            <span className="kuota-alert-icon">⚠</span>
+            <span className="kuota-alert-text">
+              <strong>Batas kuota tercapai:</strong> penyimpanan Anda telah mencapai batas paket
+              ({storagePercent}%). Fungsi unggah ditangguhkan sampai pemakaian diturunkan atau paket di-upgrade.
+            </span>
+            <a href="/paket" className="kuota-alert-btn">Upgrade paket</a>
+          </div>
+        )}
+        {subscription?.status === 'suspended' && (
+          <div className="kuota-alert kuota-alert--danger">
+            <span className="kuota-alert-icon">⚠</span>
+            <span className="kuota-alert-text">
+              <strong>Langganan disuspend:</strong> layanan dibekukan sementara. Hubungi admin
+              untuk mengaktifkannya kembali.
+            </span>
+          </div>
+        )}
+
+        {/* Info periode (tanpa istilah tagihan — pembayaran tidak digunakan) */}
         {subscription && (
           <div className="kuota-banner">
             <span className="kuota-banner-icon">ℹ</span>
             <span>
-              Siklus tagihan Anda saat ini akan diatur ulang pada{' '}
+              Periode langganan Anda saat ini berlaku hingga{' '}
               <strong>{formatDate(subscription.current_period_end)}</strong>.
             </span>
           </div>

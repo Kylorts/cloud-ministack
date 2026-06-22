@@ -1,5 +1,4 @@
-# JadeStack — INI AWAN
-
+# JadeStack
 Simulasi layanan komputasi awan bergaya **Infrastructure-as-a-Service (IaaS)** untuk mata
 kuliah Komputasi Awan. Menyediakan penyimpanan objek (S3-compatible via MiniStack), hosting
 situs statis, langganan paket, kredensial Access Key/Secret Key dengan kebijakan **IAM**,

@@ -24,6 +24,7 @@ export const adminFastForward = (id) => api.post(`/admin/subscriptions/${id}/fas
 export const adminSuspendSub = (id) => api.post(`/admin/subscriptions/${id}/suspend`)
 export const adminUnsuspendSub = (id) => api.post(`/admin/subscriptions/${id}/unsuspend`)
 export const adminExpireGrace = (id) => api.post(`/admin/subscriptions/${id}/expire-grace`)
+export const adminMarkPastDue = (id) => api.post(`/admin/subscriptions/${id}/mark-past-due`)
 export const adminRepairSubscription = (id) => api.post(`/admin/subscriptions/${id}/repair`)
 
 // Riwayat langganan (event berhasil dari activity log; menggantikan "transaksi")

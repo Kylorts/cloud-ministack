@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { parseUTC } from '../utils/datetime'
 import { useParams, useNavigate } from 'react-router-dom'
 import AdminNav from '../components/AdminNav'
-import { getAdminSubscription, adminFastForward, adminSuspendSub, adminUnsuspendSub, adminExpireGrace, adminRepairSubscription } from '../services/admin'
+import { getAdminSubscription, adminFastForward, adminSuspendSub, adminUnsuspendSub, adminExpireGrace, adminMarkPastDue, adminRepairSubscription } from '../services/admin'
 import './AdminDashboardPage.css'
 import './AdminPages.css'
 
@@ -79,6 +79,9 @@ export default function AdminSubscriptionDetailPage() {
             <button className="adm-btn-ghost" onClick={fastForward} disabled={busy} title="DEMO: majukan periode untuk menerapkan downgrade terjadwal">⏩ Majukan Periode</button>
             {s.status === 'over_quota' && (
               <button className="adm-btn-ghost" onClick={() => runAction(adminExpireGrace)} disabled={busy} title="DEMO: habiskan grace period sekarang lalu jalankan auto-suspend">⏳ Habiskan Grace</button>
+            )}
+            {(s.status === 'active' || s.status === 'over_quota') && s.price > 0 && (
+              <button className="adm-btn-ghost" onClick={() => runAction(adminMarkPastDue, `Tandai langganan ${s.client_name} NUNGGAK (simulasi)?`)} disabled={busy} title="DEMO: tandai nunggak (terkunci dari ubah paket). Otomatis turun ke Free saat klien membuka langganannya.">🧾 Simulasikan Nunggak</button>
             )}
             {s.status === 'suspended' ? (
               <button className="adm-btn-ghost" onClick={() => runAction(adminUnsuspendSub)} disabled={busy}>▶ Unsuspend</button>

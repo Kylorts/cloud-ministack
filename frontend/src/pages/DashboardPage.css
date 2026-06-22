@@ -490,6 +490,14 @@
   margin: 0;
 }
 
+.security-sub {
+  font-family: var(--font-ui);
+  font-size: var(--font-size-sm);
+  color: var(--color-dark);
+  opacity: 0.75;
+  margin: 4px 0 0;
+}
+
 /* ── Bottom Grid ──────────────────────────────────────────── */
 .bottom-grid {
   display: grid;

@@ -77,7 +77,16 @@ export default function AdminAccessKeysGlobalPage() {
                       {k.status === 'active' ? 'Aktif' : k.status === 'revoked' ? 'Dicabut' : 'Disabled'}
                     </span>
                   </td>
-                  <td className="adm-owner-cell">{k.policy_name ? `🛡 ${k.policy_name}` : (k.permission === 'read_only' ? 'Read-Only' : 'Full')} · {k.category}</td>
+                  <td>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: 11, fontWeight: 500, padding: '3px 9px', borderRadius: 6, background: '#F1EFE8', color: '#444441' }}>
+                        {k.policy_name || (k.permission === 'read_only' ? 'Read-Only' : 'Full Access')}
+                      </span>
+                      <span style={{ fontSize: 11, fontWeight: 500, padding: '3px 9px', borderRadius: 6, textTransform: 'capitalize', background: k.category === 'hosting' ? '#E6F1FB' : '#EAF3DE', color: k.category === 'hosting' ? '#185FA5' : '#3B6D11' }}>
+                        {k.category}
+                      </span>
+                    </span>
+                  </td>
                   <td className="adm-util-cell">{fmtWhen(k.last_used_at)}</td>
                   <td>
                     {k.status === 'active'

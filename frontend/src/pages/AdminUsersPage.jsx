@@ -14,6 +14,14 @@ function fmtDate(s) {
   return parseUTC(s).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
+// Status langganan yang perlu disorot (status 'active' tak diberi pill agar tak ramai).
+const SUB_STATUS = {
+  over_quota: ['Over Quota', 'warn'],
+  past_due: ['Nunggak', 'warn'],
+  suspended: ['Disuspend', 'danger'],
+  pending_payment: ['Pending', 'off'],
+}
+
 export default function AdminUsersPage() {
   const [users, setUsers] = useState([])
   const [total, setTotal] = useState(0)
@@ -71,7 +79,17 @@ export default function AdminUsersPage() {
                       {u.status === 'active' ? '● Aktif' : u.status === 'suspended' ? '● Ditangguhkan' : u.status}
                     </span>
                   </td>
-                  <td className="adm-owner-cell">{u.plan_name || '—'}</td>
+                  <td className="adm-owner-cell">
+                    {u.packages?.length ? u.packages.map((p) => {
+                      const st = SUB_STATUS[p.status]
+                      return (
+                        <div key={p.category} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                          <span>{p.plan_name}</span>
+                          {st && <span className={`adm-status-pill adm-status-pill--${st[1]}`}>{st[0]}</span>}
+                        </div>
+                      )
+                    }) : '—'}
+                  </td>
                   <td className="adm-util-cell">{fmtDate(u.created_at)}</td>
                   <td><button className="adm-link-btn" onClick={() => navigate(`/admin/pengguna/${u.id}`)}>Detail</button></td>
                 </tr>

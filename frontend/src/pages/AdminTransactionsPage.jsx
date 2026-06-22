@@ -53,11 +53,6 @@ export default function AdminTransactionsPage() {
           </div>
         </div>
 
-        <div className="adm-info-banner" style={{ marginBottom: 16 }}>
-          ℹ Pembayaran di-skip (simulasi) — langganan langsung aktif &amp; gratis. Halaman ini menampilkan
-          riwayat <strong>event langganan yang berhasil</strong> (bukan transaksi pembayaran).
-        </div>
-
         <div className="adm-table-card">
           <table className="adm-table">
             <thead><tr><th>Waktu</th><th>Klien</th><th>Aksi</th><th>Detail</th></tr></thead>
