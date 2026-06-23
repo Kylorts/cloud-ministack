@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import heroImg from '../assets/landing-page.jpg'
 import './LandingPage.css'
 
 /* ── Icons (SVG inline, sesuai tema) ── */
@@ -94,12 +95,12 @@ export default function LandingPage() {
           </div>
           <div className="lp-hero-media">
             {imgOk ? (
-              <img src="/hero.png" alt="Ilustrasi dashboard JADESTACK"
+              <img src={heroImg} alt="Ilustrasi dashboard JADESTACK"
                 className="lp-hero-img" onError={() => setImgOk(false)} />
             ) : (
               <div className="lp-hero-placeholder">
                 <CloudIcon />
-                <span>Letakkan gambar di <code>frontend/public/hero.png</code></span>
+                <span>Letakkan gambar di <code>frontend/src/assets/landing-page.jpg</code></span>
               </div>
             )}
           </div>
