@@ -46,8 +46,7 @@ Selesai. 🎉
 
 ---
 
-## Menjalankan tanpa Docker (mode pengembangan)
-
+## Menjalankan tanpa Docker 
 Mode ini menjalankan **backend & frontend langsung di komputer** (mendukung hot-reload), cocok
 untuk pengembangan. Layanan infrastruktur (MySQL, MiniStack, Mailpit) tetap paling praktis
 dijalankan lewat Docker karena **MiniStack tidak punya instalasi native**.
@@ -218,7 +217,7 @@ cloud-ministack/
 
 ---
 
-## Tumpukan teknologi
+## Tech Stack
 
 - **Backend:** FastAPI, SQLAlchemy 2.0, Alembic, PyMySQL, boto3 (klien S3), JWT, bcrypt
 - **Frontend:** React 19, Vite, React Router 7, Axios (build dengan pnpm)
